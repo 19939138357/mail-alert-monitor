@@ -1,0 +1,12 @@
+{
+  "name": "mail-alert-edge-login",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional dependencies for the legacy Windows Edge login adapter",
+  "dependencies": {
+    "playwright-core": "1.62.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

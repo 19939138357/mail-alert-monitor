@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>org.example.mailalertmonitor</string>
+<key>CFBundleName</key><string>抽查邮件监控</string>
+<key>CFBundleDisplayName</key><string>抽查邮件监控</string>
+<key>CFBundleExecutable</key><string>MailMonitor</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>1.3.15</string>
+<key>CFBundleVersion</key><string>24</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>NSAppleEventsUsageDescription</key><string>仅在你点击进入监控机1时控制Safari登录指定系统，并从监控机1工具栏的浏览器按钮连接邮箱。</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSScreenCaptureUsageDescription</key><string>仅截取你选择的远程邮箱窗口，在本机识别抽查邮件和确认码。</string>
+</dict></plist>

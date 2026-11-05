@@ -1,0 +1,13 @@
+monitor_config.json
+04_资料/
+last_ocr.txt
+last_screenshot.png
+*.log
+*.exe
+*.dll
+*.pdb
+**/node_modules/
+__pycache__/
+**/__pycache__/
+.cache/
+.test-output/

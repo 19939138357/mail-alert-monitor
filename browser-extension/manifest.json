@@ -1,0 +1,11 @@
+{
+  "manifest_version":3,
+  "name":"邮件告警 · 手机提醒",
+  "version":"2.1.0",
+  "minimum_chrome_version":"120",
+  "description":"主动开启当前邮箱页面监控，新告警通过本机推送微信、QQ邮箱或钉钉。",
+  "permissions":["activeTab","scripting","storage","alarms"],
+  "host_permissions":["http://127.0.0.1:17368/*"],
+  "background":{"service_worker":"background.js"},
+  "action":{"default_popup":"popup.html","default_title":"邮件告警监控"}
+}

@@ -1,0 +1,7 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>邮件告警</title><link rel="stylesheet" href="popup.css"></head><body>
+<h1>邮件告警</h1><p>只监控主动开启的当前网页。已有邮件作为基线，新匹配内容连续确认后推送。</p>
+<label for="token">本机配对码（首次填写）</label><div class="pair"><input id="token" type="password" autocomplete="off" maxlength="64"><button id="pair">连接</button></div>
+<div id="state" role="status">检查连接中…</div><div class="buttons"><button id="start">开启当前页</button><button id="stop">停止监控</button><button id="refresh">刷新状态</button></div>
+<p class="note">保持收件列表打开、邮箱登录且电脑不休眠。刷新页面后需重新开启；只检测当前可读文本，不能代替邮箱服务器监听。</p>
+<p class="note">远程桌面中的 Foxmail 是画面，请使用“一键启动监控.exe”的 OCR 入口。网页 iframe／画布也可能读不到邮件。</p>
+<p class="note">持续响铃：电脑“设置手机推送”启用告警响铃，安卓1.1.0支持微信；安装并开启“告警响铃助手”。验证码保持普通通知。</p><script src="popup.js"></script></body></html>

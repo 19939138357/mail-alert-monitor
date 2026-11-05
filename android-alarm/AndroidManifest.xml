@@ -1,0 +1,32 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.example.mailalertalarm" android:versionCode="2" android:versionName="1.1.0">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <application android:label="夜间告警响铃助手" android:icon="@drawable/ic_alarm"
+        android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".AlarmActivity" android:exported="false"
+            android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true" />
+        <service android:name=".AlertListener" android:exported="false"
+            android:label="夜间告警响铃助手：读取所选应用的告警通知"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+        </service>
+        <service android:name=".AlarmService" android:exported="false"
+            android:foregroundServiceType="specialUse|mediaPlayback" android:stopWithTask="false">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User explicitly enables a local notification alarm guard. An ongoing notification shows that selected QQ Mail or DingTalk night alerts are being monitored. The service remains ready while armed, and plays a looping alarm with vibration until acknowledged. No network access or message storage." />
+        </service>
+    </application>
+</manifest>
