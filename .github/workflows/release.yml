@@ -1,0 +1,60 @@
+name: Publish desktop and handset downloads
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'release/version'
+permissions:
+  contents: read
+concurrency:
+  group: publish-mail-alert-monitor
+  cancel-in-progress: false
+jobs:
+  windows:
+    uses: ./.github/workflows/windows.yml
+  mac:
+    uses: ./.github/workflows/mac.yml
+  handset:
+    uses: ./.github/workflows/mobile.yml
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: [windows, mac, handset]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-desktop
+          path: packages
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mac-desktop
+          path: packages
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: android-handset
+          path: packages
+      - name: Publish all three packages together
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=$(cat release/version)
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          cd packages
+          assets=(MailAlertMonitor-macOS.zip MailAlertMonitor-Windows.zip MailAlertMonitor-Android.apk)
+          sha256sum "${assets[@]}" > SHA256SUMS.txt
+          # A retry may finish its own draft, but never replace a published release.
+          if gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/existing.json" 2>/dev/null; then
+            jq -e --arg commit "$GITHUB_SHA" '.isDraft and .targetCommitish == $commit' "$RUNNER_TEMP/existing.json" >/dev/null
+            gh release upload "$tag" "${assets[@]}" SHA256SUMS.txt --clobber
+          else
+            gh release create "$tag" "${assets[@]}" SHA256SUMS.txt --target "$GITHUB_SHA" --title "邮件监控 $tag" --notes-file ../release/notes.md --draft
+          fi
+          gh release edit "$tag" --draft=false --latest

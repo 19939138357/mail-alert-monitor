@@ -1,68 +1,53 @@
-# 邮件监控与手机提醒 · Mail Alert Monitor
+# 邮件监控 · Mail Alert Monitor
 
-从可见的远程邮箱画面发现未读邮件，读取完整正文，再通过手机通知通道提醒。适用于只能在远程桌面查看邮箱、暂时没有邮件服务器接口的场景。
+在电脑上看守远程邮箱，在安卓手机上查看监控状态。Mac 控制台把运行状态、待处理数量、最近邮件原主题和推送结果放在首页。Windows 可框选邮件列表和阅读区，自动处理未读邮件。
 
-当前 macOS 主线来自 1.3.15，仓库同时保留 Windows 旧实现、浏览器扩展和 Android 响铃助手。此仓库是经过隐私清理的源码版本，门户、邮箱和设备标识均为示例，需要适配自己的环境。
+## 下载
 
-## 能做什么
+| 平台 | 下载 | 首次打开 |
+| --- | --- | --- |
+| macOS 14 及以上，Intel 或 Apple 芯片 | [Mac 通用版 ZIP](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.0/MailAlertMonitor-macOS.zip) | 解压，把两个 App 放在同一文件夹，打开「抽查邮件监控开源版」 |
+| Windows 10 / 11，.NET Framework 4.8 | [Windows 便携版 ZIP](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.0/MailAlertMonitor-Windows.zip) | 将整个 ZIP 解压到自己的可写文件夹，双击 `MailAlertMonitor.exe` |
+| 安卓 8 及以上 | [「监控机 1」APK](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.0/MailAlertMonitor-Android.apk) | 在手机上安装，打开「配对电脑」，输入 Mac 上显示的六位码 |
 
-- macOS 原生界面：选择邮箱窗口、校准列表和正文区域、查看队列及运行状态。
-- 连续核对未读标记，点击前保存整批任务；逐页读取正文后再发送通知。
-- 通知标题优先显示邮件时间和原主题；相同主题按核对过的身份区分。
-- 持久保存发送意图、正文和去重记录；结果不明确时等待本人核对，不盲目重发。
-- PushPlus 微信通知、本机故障提示、受控的 Safari 门户适配及断线重试。
-- Android 通知监听与持续响铃；Windows 旧版还保留 QQ 邮箱、钉钉等通道。
+[版本说明及 SHA-256 校验文件](https://github.com/19939138357/mail-alert-monitor/releases/tag/v1.4.0) · [MIT 许可证](LICENSE)
 
-## 源码目录
+![Mac 监控总览，展示正在监控、待处理邮件数量和最近的邮件原主题。图中为合成示例。](macos/Assets/monitor-overview.png)
 
-| 目录 | 内容 |
+## Mac 上监控未读邮件
+
+1. 在 Safari 中打开自己有权访问的 HTTPS 远程 Foxmail 页面。保持邮箱可见，按「是否已读」排序，展开未读、收起已读。
+2. 打开「抽查邮件监控开源版」，点「选择邮箱窗口」，预览后在 Mac 上确认这个页面。按提示授予录屏、辅助功能权限。用「识别区域」框选邮件列表和正文。
+3. 在「通知与设置」填自己的 PushPlus Token，点「测试微信」核对收件，然后点「开始监控」。
+4. 首页可以区分邮件正在读取、排队、服务已受理和待核对。程序在点击前保存整批候选，核对正文后按原主题提交。对结果不确定的邮件保留记录，供人工核对。
+
+下载的 Mac 工具使用本地签名，未通过 Apple 公证。主监控使用系统组件。另开「手机配对」时需要本机可运行 Python 3.8 或更高版本。特定门户的一键登录和断线重连需按自己的系统做适配；已适配门户也可能遇到远程空白页或重连延迟。[Mac 使用说明](macos/使用说明.txt) · [门户适配](docs/PORTAL_ADAPTER.md)
+
+## Windows 上开始监控
+
+1. 将整个 ZIP 解压到可写文件夹，双击 `MailAlertMonitor.exe`。在「监控设置」里选「Foxmail 未读邮件正文」，填能唯一识别邮箱的窗口标题。
+2. 让邮箱处于前台，展开右侧的详细邮件头。用鼠标分别框选带蓝点的邮件列表和完整阅读区，远程窗口需要把正文滚动条也框进去。
+3. 在「通知设置」填自己的推送渠道，确认测试消息后再启动。新发现的未读邮件会先进入加密队列。程序按原主题发送已核对的正文，读不到末尾、身份不明或送达结果待查的邮件可以在「待核对邮件」查看。
+4. 还可以选择「屏幕关键词」或「抽查邮件确认码」。中文邮箱需要 Windows 中文 OCR 语言包。远程画面中的短邮件如果没有可识别的滚动条，程序会保留待核对。[Windows 便携版指南](legacy/windows/PORTABLE.md)
+
+## 安卓手机控制 Mac
+
+两端连同一个 Wi-Fi。在 Mac 点「手机配对」并显示六位码，安卓「监控机 1」选电脑并输入六码。首页能看待处理数量、邮件原主题和推送状态。在 Mac 同意共享已确认的邮箱页面后，可以在手机查看和操作该页面。公开版首次授权或更换目标页面须在 Mac 完成。安卓当前的配对主机为 Mac；Windows 可以通过自己的通知通道发送提醒。[安卓配对和构建说明](handset/README.md)
+
+## 数据与运行条件
+
+屏幕 OCR 在电脑本地运行，使用者的队列和近期记录可能包含邮件正文。配置手机推送后，选定渠道会收到对应邮件内容。Mac 开源版的数据和钥匙串标识与已有私人安装版分开。Windows 解压目录在使用后会含个人设置或运行记录。请只分享原始发布包。[隐私说明](docs/PRIVACY.md)
+
+窗口被遮挡、系统睡眠、远程掉线或布局改变都可能影响识别。推送服务受理后，实际送达仍需在接收端核对。仅靠画面无法区分发件人、主题和时间完全相同的两封信。
+
+## 源码与验证
+
+| 目录 | 内容与构建 |
 | --- | --- |
-| `macos/` | SwiftUI、Vision OCR、ScreenCaptureKit、Keychain、Safari 适配与隔离测试 |
-| `legacy/windows/` | PowerShell 监控、WinForms 控制台源码与旧版测试 |
-| `browser-extension/` | 基于 Manifest V3 的主动网页监控扩展 |
-| `android-alarm/` | 使用 Android 系统 API 的通知响铃助手 |
-| `docs/` | 门户适配、隐私与依赖说明 |
+| [macos](macos) | 在 Mac 运行 `bash macos/build.sh`，生成通用主程序并进行本机自测 |
+| [handset](handset) | 安卓控制端与 Mac 配对桥。在 Mac 执行 `bash handset/mac/build-pair.sh`，再用 `bash macos/package-release.sh` 组合两个 App |
+| [legacy/windows](legacy/windows) | Windows OCR、WinForms 控制台、手机通知及合成测试。运行 `python legacy/windows/package.py` 生成便携包 |
+| [browser-extension](browser-extension) | 可选的 Chromium 邮件页面监控扩展 |
+| [android-alarm](android-alarm) | 独立的安卓通知响铃助手源码，与上方「监控机 1」控制端分开 |
 
-## macOS 快速开始
-
-需要 Apple Silicon Mac、macOS 14 或更高版本及 Xcode Command Line Tools。构建只输出本仓库的 `dist/` 和 `.build/`。
-
-```bash
-bash macos/build.sh
-open 'dist/抽查邮件监控开源版.app'
-```
-
-构建会生成完全合成的邮件列表样本，并运行原生自测。不会复制本机邮件截图或已有配置。录屏、辅助功能、Safari 控制等权限由使用者按自己需要授予。
-
-1. 可先运行合成样本，核对识别效果。
-2. 选择自己的远程邮箱窗口，校准蓝色列表区域与绿色正文区域。
-3. 在通知设置中配置自己的 PushPlus Token；实际内容会发送给你所配置的服务。
-4. Foxmail 按“是否已读”排序，展开未读、收起已读；保持远程邮箱可访问。
-5. 对接门户的一键入口前，先按 [门户适配说明](docs/PORTAL_ADAPTER.md) 修改示例配置并运行测试。
-
-JavaScript 表单和设备入口检查使用 Node.js：
-
-```bash
-node macos/portal-login.test.cjs
-node macos/portal-device.test.cjs
-```
-
-Windows、扩展和 Android 的构建说明见各自目录。它们作为旧平台源码保留，不代表已在本轮 Mac 环境重新通过 Windows 或真机端到端验收。
-
-## 运行边界与已知问题
-
-这是画面 OCR 工具，不是邮箱服务器订阅。布局变化、睡眠、锁屏、未读标记缺失、远程离线及识别失败都可能影响发现和读取；不承诺每封邮件实时送达。
-
-1.3.15 的自动重连仍有已知限制：有过关闭远程标签后停在空白页的情况，也有在第 5 次尝试、约 5 分半后才恢复的情况。重试不等于连接已恢复。双帧核对与持续扫描用于确认实际恢复，仍需针对自己的门户验证。
-
-推送服务受理与手机实际收到分别核对。服务未提供可靠幂等确认时，请求超时不能证明未送达；待核对任务不自动重发。OCR 也可能无法区分发件人、主题和时间完全相同的两封邮件。需要严格完整覆盖时，应接入稳定邮件 ID 和邮箱服务端接口。
-
-## 数据与开源范围
-
-macOS 开源版的本机数据位于 `~/Library/Application Support/MailAlertMonitorOpenSource/`；钥匙串使用独立服务标识。队列可能包含邮件正文，勿提交或公开这个目录。详见 [隐私说明](docs/PRIVACY.md)。
-
-本仓库不包含真实账号、Token、邮件、原始截图、运行记录、浏览器登录资料、签名私钥、SDK、模型缓存、历史构建或应用安装包。测试使用示例地址和合成内容。
-
-## 许可证
-
-自有源码以 [MIT License](LICENSE) 发布。第三方工具、平台和依赖按各自许可证使用，见 [第三方说明](THIRD_PARTY_NOTICES.md)。
+公开样本全部采用合成内容。仓库附有构建与发布流程，Android 正式签名私钥由维护者保管。自有源码使用 MIT 许可证，第三方组件按各自条款分发。[验证说明](docs/VALIDATION.md) · [第三方许可](THIRD_PARTY_NOTICES.md)

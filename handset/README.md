@@ -24,3 +24,9 @@
 - 在 `handset/mac` 运行 `python3 -m unittest discover -p 'test_*.py'`，验证限速、一次性配对码和接口的访问控制。
 - 构建并放好两份 Mac App 后，在仓库根目录运行 `python3 handset/mac/tests/packaged_status.py dist`。此检查通过本机回环和一次性测试身份读取状态，在测试结束时停止服务。
 - 安卓与 Mac 跨语言配对测试使用 JDK 17 和测试依赖 `org.json:json:20240303`。在仓库根目录执行 `python3 handset/android/tests/test_code_interop.py MAC_LAN_IP --jdk-bin "$JAVA_HOME/bin" --json-jar /path/to/json.jar`。使用本机可绑定的局域网 IPv4 地址。测试覆盖错误码、前导零、单次使用、服务端证明、证书与目标地址绑定。
+
+## 安卓配对界面
+
+以下为 Android 15 上首次打开正式 APK 的画面。输入电脑显示的六位数，或使用「手动填地址」选择已知的电脑。
+
+<img src="../docs/images/android-pair.png" width="280" alt="安卓配对电脑页面，包含六位码和配对并连接按钮">

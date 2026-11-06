@@ -77,7 +77,8 @@ function Invoke-FoxmailWheel($Context,[int]$Delta,[long]$Stamp) {
     return 7
 }
 function Get-FoxmailStableBody($Context,$Engine,$Stamp) {
-    return [pscustomobject]@{Text=$script:pages[$script:pageNo].Text;AtEnd=$script:positiveEnd}
+    $isLastPage=$script:pageNo -eq ($script:pages.Count-1)
+    return [pscustomobject]@{Text=$script:pages[$script:pageNo].Text;AtEnd=($script:positiveEnd -and $isLastPage)}
 }
 function Run-ScreenFixture($pages,$positive,$resume) {
     $script:pages=$pages;$script:positiveEnd=$positive;$script:clicked=$false;$script:resumed=$resume;$script:pageNo=0;$script:furthestPage=0
