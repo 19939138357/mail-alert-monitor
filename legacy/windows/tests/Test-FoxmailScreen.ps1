@@ -68,16 +68,19 @@ function Read-FoxmailFrame($Context,$Engine,$Pane) {
     return [pscustomobject]@{Rows=@($ticket)}
 }
 function Invoke-MailConfirmationClick {$script:clicked=$true;return $true}
-function Invoke-FoxmailWheel($Context,$Delta,$Stamp) {
+# Match the production signature: PS 5.1 can pass a bare -120 as text to an
+# untyped mock, making the direction test a locale-dependent string comparison.
+function Invoke-FoxmailWheel($Context,[int]$Delta,[long]$Stamp) {
     if ($Delta -gt 0){$script:pageNo=0}
     elseif ($script:pageNo -lt $script:pages.Count-1){$script:pageNo++}
+    $script:furthestPage=[Math]::Max($script:furthestPage,$script:pageNo)
     return 7
 }
 function Get-FoxmailStableBody($Context,$Engine,$Stamp) {
     return [pscustomobject]@{Text=$script:pages[$script:pageNo].Text;AtEnd=$script:positiveEnd}
 }
 function Run-ScreenFixture($pages,$positive,$resume) {
-    $script:pages=$pages;$script:positiveEnd=$positive;$script:clicked=$false;$script:resumed=$resume;$script:pageNo=0
+    $script:pages=$pages;$script:positiveEnd=$positive;$script:clicked=$false;$script:resumed=$resume;$script:pageNo=0;$script:furthestPage=0
     return Get-FoxmailOpenContent -Config @{} -Engine 1 -Ticket $ticket -ResumeOnly:$resume
 }
 $single=[pscustomobject]@{Text=[string[]]$header.Clone()}
@@ -94,6 +97,7 @@ Assert-Screen ($header[0] -eq 'Quarterly report' -and $header[4] -eq 'Demo Servi
 $first=[pscustomobject]@{Text=[string[]]($header+@('overlap one','overlap two'))}
 $last=[pscustomobject]@{Text=@('overlap one','overlap two','last paragraph')}
 $r=Run-ScreenFixture @($first,$last) $true $false
+Assert-Screen ($script:furthestPage -eq 1) 'wheel reached second page of synthetic mail'
 if (!$r.Complete) {
     throw ("synthetic multipage read incomplete; current page {0}; outcome {1}; diagnostic {2}" -f $script:pageNo,$r.Reason,$r.Trace)
 }
