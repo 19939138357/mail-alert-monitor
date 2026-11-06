@@ -1,8 +1,0 @@
-build/
-dist/
-signing/
-res/raw/night_alarm.wav
-*.apk
-*.keystore
-*.jks
-build-result.json
