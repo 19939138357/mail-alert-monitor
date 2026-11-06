@@ -20,7 +20,7 @@ import ApplicationServices
     }
     func prepareMailbox(epoch:Int) async throws ->Bool {
         guard running,generation==epoch else{return false}
-        guard settings.autoOpen,settings.bundle==SystemPortal.browserID,settings.title=="administrator@192.0.2.11" else{return true}
+        guard SystemPortal.isAdapted,settings.autoOpen,settings.bundle==SystemPortal.browserID,settings.title=="administrator@192.0.2.11" else{return true}
         if SafariDevice.state() == .remote,!SafariDevice.interrupted(),!reconnecting{return true}
         if !reconnecting {
             try resetMailboxPages();reconnecting=true;mailReady=false

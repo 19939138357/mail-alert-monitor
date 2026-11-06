@@ -13,20 +13,25 @@ struct Settings: Codable {
     var title=""
     var bundle=""
     var includeExistingUnread=true
+    var approvedPage:String?
     var browseEntireList=false
     init(){}
-    enum CodingKeys:String,CodingKey {case list,body,night,autoOpen,title,bundle,includeExistingUnread,browseEntireList}
+    enum CodingKeys:String,CodingKey {case list,body,night,autoOpen,title,bundle,includeExistingUnread,browseEntireList,approvedPage}
     init(from decoder:Decoder)throws {
         let c=try decoder.container(keyedBy:CodingKeys.self)
         list=try c.decodeIfPresent(Region.self,forKey:.list) ?? list;body=try c.decodeIfPresent(Region.self,forKey:.body) ?? body
         night=try c.decodeIfPresent(Bool.self,forKey:.night) ?? true;autoOpen=try c.decodeIfPresent(Bool.self,forKey:.autoOpen) ?? true
         title=try c.decodeIfPresent(String.self,forKey:.title) ?? "";bundle=try c.decodeIfPresent(String.self,forKey:.bundle) ?? ""
         includeExistingUnread=try c.decodeIfPresent(Bool.self,forKey:.includeExistingUnread) ?? true
+        approvedPage=try c.decodeIfPresent(String.self,forKey:.approvedPage)
         browseEntireList=false // Retired: never tour read-mail history.
     }
 }
 enum SystemPortal {
     static let url=URL(string:"https://portal.example.com:9978/admin.php?controller=admin_index&action=login")!
+    // Only a distributor that has adapted the portal and its origin/identity checks
+    // should enable the dedicated sign-in flow. The public build uses a chosen window.
+    static let isAdapted = false
     static let browserID="com.apple.Safari"
 }
 @MainActor final class Monitor: ObservableObject {
@@ -47,7 +52,7 @@ enum SystemPortal {
     @Published var systemPassword=""
     @Published var systemSaving=false
     @Published var systemError=""
-    @Published var status="选择远程邮箱窗口，预览并校准识别区域。"
+    @Published var status="在 Safari 打开远程 Foxmail 收件箱，然后选择邮箱窗口。"
     @Published var log: [String]=[]
     @Published var preview: NSImage?
     @Published var regionMode=0
@@ -64,7 +69,7 @@ enum SystemPortal {
     @Published var lastScan="尚未扫描"
     @Published var screenAllowed=CGPreflightScreenCaptureAccess()
     @Published var accessibility=AXIsProcessTrusted()
-    @Published var ocrSummary="正文完成后保存在本项目待发送队列；截图不会自动保存。"
+    @Published var ocrSummary="邮件正文会保存在本机队列中。"
     var task: Task<Void,Never>?
     var connectionTask: Task<Void,Never>?
     var connectionGeneration=0
@@ -210,7 +215,7 @@ enum SystemPortal {
         }
     }
     func connectSystem() {
-        guard !openingSystem,!running,!busy,!systemSaving else{return}
+        guard SystemPortal.isAdapted,!openingSystem,!running,!busy,!systemSaving else{return}
         connectionTask=Task{await openSystem()}
     }
     func cancelConnection() {
@@ -326,7 +331,8 @@ enum SystemPortal {
             let content=try await SCShareableContent.excludingDesktopWindows(true,onScreenWindowsOnly:true)
             windows=content.windows.filter { $0.owningApplication?.processID != ProcessInfo.processInfo.processIdentifier && $0.windowLayer==0 && $0.frame.width>250 && $0.frame.height>180 && !($0.title ?? "").isEmpty }.sorted{label($0)<label($1)}
             if !windows.contains(where:{$0.windowID==selection}) {
-                selection=windows.first(where:{$0.title==settings.title && $0.owningApplication?.bundleIdentifier==settings.bundle})?.windowID ?? 0
+                let matches=windows.filter{$0.title==settings.title && $0.owningApplication?.bundleIdentifier==settings.bundle}
+                selection=matches.count==1 ? matches[0].windowID:0
             }
             note(windows.isEmpty ? "未找到可监控窗口，请打开远程邮箱并检查录屏权限。":"窗口列表已刷新，请选择远程邮箱窗口。")
         } catch { note("读取窗口失败，请检查录屏权限并重新打开应用。") }
@@ -369,7 +375,7 @@ enum SystemPortal {
             let secret=try await Task.detached{try Secrets.read()}.value
             guard !secret.isEmpty else {
                 hasToken=false;notificationNeedsUnlock=false
-                note("微信配置未找到。请停止监控后在通知与账号中保存配置。");return
+                note("微信配置未找到。请停止监控后在通知与设置中保存配置。");return
             }
             notificationSecret=secret;notificationNeedsUnlock=false
             note("通知授权已可用，继续发送保存的完整正文。")
@@ -393,7 +399,7 @@ enum SystemPortal {
                 if self.running{self.note("通知授权已可用，继续发送保存的完整正文。")}
             case .success:
                 self.hasToken=false;self.notificationNeedsUnlock=false
-                self.note("微信配置未找到。请停止监控后在通知与账号中保存配置。")
+                self.note("微信配置未找到。请停止监控后在通知与设置中保存配置。")
             case .failure(let error):
                 self.notificationNeedsUnlock=true
                 self.note("通知配置读取失败："+error.localizedDescription+"。请点“授权通知”；新未读只排队，暂不自动打开。")
@@ -414,11 +420,16 @@ enum SystemPortal {
             if matches.count==1,let recovered=matches.first{selection=recovered.windowID;windows=content.windows;note("已恢复原邮箱标签页，继续处理保存的未读任务。")}
         }
         guard let window=content.windows.first(where:{$0.windowID==selection}),window.frame.width>100,window.frame.height>100 else {throw failure("目标窗口已关闭或最小化，请恢复窗口。")}
-        if running,(window.title ?? "") != settings.title {throw failure("目标页面已切换。请回到所选邮箱标签页。")}
+        if running, (window.title ?? "") != settings.title || window.owningApplication?.bundleIdentifier != settings.bundle {throw failure("目标窗口已切换。请回到所选邮箱。")}
+        if running,!SystemPortal.isAdapted {
+            guard let approved=settings.approvedPage,PublicMailbox.inspect(window)?.digest==approved else {
+                throw failure("请保持已授权的 Safari 邮箱标签打开，页面地址变化后请停止并重新选择。")
+            }
+        }
         return window
     }
     func restoreMailboxWhenIdle() async ->Bool {
-        guard running,settings.autoOpen,settings.bundle==SystemPortal.browserID,
+        guard SystemPortal.isAdapted,running,settings.autoOpen,settings.bundle==SystemPortal.browserID,
               settings.title=="administrator@192.0.2.11",AXIsProcessTrusted(),Date().timeIntervalSince(lastActivation)>8,
               CGEventSource.secondsSinceLastEventType(.combinedSessionState,eventType:CGEventType(rawValue:UInt32.max)!)>2,
               CGEventSource.flagsState(.combinedSessionState).intersection([.maskShift,.maskControl,.maskAlternate,.maskCommand]).isEmpty,
@@ -515,11 +526,27 @@ enum SystemPortal {
             note("截图选区验证完成："+ocrSummary)
         }catch{note("截图选区识别失败")}
     }
+    func approveMailbox(_ window:SCWindow)->Bool {
+        guard let page=PublicMailbox.inspect(window) else {
+            note("无法核对邮箱页面。请在 Safari 打开 HTTPS 远程 Foxmail，选中邮箱标签，并确认辅助功能已开启。")
+            return false
+        }
+        if settings.approvedPage==page.digest{return true}
+        let dialog=NSAlert()
+        dialog.messageText="允许监控这个邮箱页面？"
+        dialog.informativeText=page.host+"\n"+(window.title ?? "")+"\n\n程序会读取这个页面的未读邮件，并按你的通知设置发送。页面地址变化后需要重新确认。"
+        dialog.addButton(withTitle:"允许监控");dialog.addButton(withTitle:"取消")
+        dialog.buttons[0].keyEquivalent="";dialog.buttons[1].keyEquivalent="\r"
+        guard dialog.runModal() == .alertFirstButtonReturn,PublicMailbox.inspect(window)?.digest==page.digest else{return false}
+        settings.approvedPage=page.digest
+        return true
+    }
     func start() {
         guard !running,!busy,!testInFlight,!offline,startupError==nil,selection != 0,let window=windows.first(where:{$0.windowID==selection}) else{return}
         permissions()
         guard screenAllowed else{requestScreen();return}
-        if settings.autoOpen && !accessibility {requestAccessibility();return}
+        if (settings.autoOpen || !SystemPortal.isAdapted) && !accessibility {requestAccessibility();return}
+        guard SystemPortal.isAdapted || approveMailbox(window) else{return}
         do {
             settings.title=window.title ?? "";settings.bundle=window.owningApplication?.bundleIdentifier ?? ""
             try save()
@@ -543,7 +570,7 @@ enum SystemPortal {
             recovery.cancel();reconnecting=false;recoveryPortalOpened=false;automaticLoginSubmitted=false;missingMailboxFrames=0
             note(hasToken ? "逐封监控已启动。先检查推送配置并保存未读队列；配置可用且输入空闲后才自动打开邮件。":"观察模式已启动；未读邮件只排队，不自动打开，配置微信后再处理。")
             if hasToken{loadNotificationSecret()}
-            if hasSystemCredentials && settings.autoOpen{loadPortalSecret()}
+            if SystemPortal.isAdapted && hasSystemCredentials && settings.autoOpen{loadPortalSecret()}
             watchNotificationHealth()
             task=Task {
                 while !Task.isCancelled && self.running && self.generation==epoch {
@@ -565,8 +592,13 @@ enum SystemPortal {
         guard let url=ledgerURL else{throw failure("邮件队列未就绪")}
         try Storage.write(inbox,to:url);queuedCount=inbox.waiting;uncertainCount=inbox.uncertain
     }
-    func active(_ w: SCWindow)->Bool {
+    func active(_ w: SCWindow,at point:CGPoint?=nil)->Bool {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier==w.owningApplication?.processID else{return false}
+        if !SystemPortal.isAdapted {
+            guard w.windowID==selection,let approved=settings.approvedPage,
+                  let page=PublicMailbox.inspect(w),page.digest==approved else{return false}
+            return point.map(page.viewport.contains) ?? true
+        }
         guard SafariDevice.state() == .remote,let focused=SafariDevice.window(),let rect=SafariDevice.rect(focused),
               SafariDevice.text(focused)==w.title else{return false}
         return abs(rect.minX-w.frame.minX)<3 && abs(rect.minY-w.frame.minY)<3 &&
@@ -581,6 +613,7 @@ enum SystemPortal {
               !CGEventSource.buttonState(.combinedSessionState,button:.left),!CGEventSource.buttonState(.combinedSessionState,button:.right) else{return false}
         guard point.x>2,point.y>2,point.x<window.frame.width-2,point.y<window.frame.height-2 else{return false}
         let p=CGPoint(x:window.frame.minX+point.x,y:window.frame.minY+point.y)
+        guard active(window,at:p) else{return false}
         let system=AXUIElementCreateSystemWide();var element: AXUIElement?
         guard AXUIElementCopyElementAtPosition(system,Float(p.x),Float(p.y),&element) == .success,let element else{return false}
         var pid: pid_t=0;guard AXUIElementGetPid(element,&pid) == .success,pid==window.owningApplication?.processID else{return false}
@@ -591,7 +624,7 @@ enum SystemPortal {
         // clicks the previous remote position even if its macOS location differs.
         move.flags=[];move.post(tap:.cghidEventTap)
         try? await Task.sleep(nanoseconds:150_000_000)
-        guard running,generation==epoch,notificationAvailability.canOpenMail,active(window),!CGEventSource.buttonState(.combinedSessionState,button:.left) else{return false}
+        guard running,generation==epoch,notificationAvailability.canOpenMail,active(window,at:p),!CGEventSource.buttonState(.combinedSessionState,button:.left) else{return false}
         down.flags=[];up.flags=[]
         down.setIntegerValueField(.mouseEventClickState,value:1);up.setIntegerValueField(.mouseEventClickState,value:1)
         down.post(tap:.cghidEventTap)
@@ -669,6 +702,18 @@ enum SelfTests {
         try check(SystemPortal.url.scheme=="https" && SystemPortal.url.host=="portal.example.com" && SystemPortal.url.port==9978,"fixed system origin")
         try check(SystemPortal.url.path=="/admin.php" && SystemPortal.url.query=="controller=admin_index&action=login" && SystemPortal.url.user==nil && SystemPortal.url.password==nil,"fixed login route without credentials")
         try check(SystemPortal.browserID=="com.apple.Safari","explicit Safari browser")
+        let samplePage=URL(string:"https://relay.example.org/remote/#/client/demo")!
+        let digest=PublicMailbox.identity(samplePage,title:"Foxmail")
+        try check(digest?.count==64,"public page stored only as digest")
+        try check(PublicMailbox.identity(samplePage,title:"other") != digest,"public pin requires exact window title")
+        for value in ["http://relay.example.org/remote/#/client/demo","https://user@relay.example.org/remote/#/client/demo","file:///remote"] {
+            try check(PublicMailbox.identity(URL(string:value)!,title:"Foxmail")==nil,"forbidden public page URL")
+        }
+        for value in ["https://elsewhere.example.org/remote/#/client/demo","https://relay.example.org/other/#/client/demo","https://relay.example.org/remote/#/client/other","https://relay.example.org:9999/remote/#/client/demo"] {
+            try check(PublicMailbox.identity(URL(string:value)!,title:"Foxmail") != digest,"public origin and page are pinned")
+        }
+        let fallbackSettings=try JSONDecoder().decode(Settings.self,from:Data("{}".utf8))
+        try check(fallbackSettings.approvedPage == nil,"legacy settings require explicit page approval")
         let visibleSubject="数据异常：DEMO-CDR1-198.51.100.21",visibleID="0123456789abcdef0123456789abcdef"
         let noticeA=NotificationText.title(visibleSubject,sentAt:"2026-10-14 07:01:00",alarm:true,eventID:visibleID)
         let noticeB=NotificationText.title(visibleSubject,sentAt:"2026-10-14 06:11:00",alarm:true,eventID:visibleID)

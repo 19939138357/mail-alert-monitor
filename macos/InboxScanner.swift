@@ -26,12 +26,21 @@ import ApplicationServices
             // The mail header scrolls with the body. Do not let text revealed by
             // paging move the crop or discard the task that changed unread state.
             let checkLayout=readingMail == nil && Date().timeIntervalSince(lastLayoutCheck)>=15
-            let checkHealth=settings.autoOpen && settings.bundle==SystemPortal.browserID && Date().timeIntervalSince(lastRemoteHealthCheck)>=15
+            let checkHealth=(!SystemPortal.isAdapted || (settings.autoOpen && settings.bundle==SystemPortal.browserID && settings.title=="administrator@192.0.2.11")) && Date().timeIntervalSince(lastRemoteHealthCheck)>=15
             let fullLines=(checkLayout || checkHealth) ? try await Task.detached{try recognize(image)}.value:[]
             guard running,generation==epoch else{return}
             if checkHealth {
-                lastRemoteHealthCheck=Date()
-                guard try observeMailboxFrame(fullLines) else{return}
+                if SystemPortal.isAdapted {
+                    lastRemoteHealthCheck=Date()
+                    guard try observeMailboxFrame(fullLines) else{return}
+                } else {
+                    guard Self.isMailboxFrame(fullLines) else {
+                        mailReady=false;stableListFrames=0
+                        tell("尚未识别到 Foxmail 收件箱，请检查选中的邮箱画面。")
+                        return
+                    }
+                    mailReady=true;lastRemoteHealthCheck=Date()
+                }
             }
             let detected=checkLayout ? MailboxLayout.regions(fullLines,size:size,list:savedList,body:savedBody):nil
             if checkLayout{lastLayoutCheck=Date()}
@@ -232,7 +241,14 @@ import ApplicationServices
             && !CGEventSource.buttonState(.combinedSessionState,button:.left) && !CGEventSource.buttonState(.combinedSessionState,button:.right)
     }
     func activateMailWhenIdle(_ window:SCWindow) async ->Bool {
-        guard Date().timeIntervalSince(lastActivation)>8,AXIsProcessTrusted(),SafariDevice.state() == .remote,
+        guard Date().timeIntervalSince(lastActivation)>8,SafariDevice.inputIdle() else{return false}
+        if !SystemPortal.isAdapted {
+            guard let approved=settings.approvedPage,PublicMailbox.inspect(window)?.digest==approved,
+                  let pid=window.owningApplication?.processID,let app=NSRunningApplication(processIdentifier:pid) else{return false}
+            lastActivation=Date()
+            return app.activate()
+        }
+        guard AXIsProcessTrusted(),SafariDevice.state() == .remote,
               CGEventSource.secondsSinceLastEventType(.combinedSessionState,eventType:CGEventType(rawValue:UInt32.max)!)>2,
               CGEventSource.flagsState(.combinedSessionState).intersection([.maskShift,.maskControl,.maskAlternate,.maskCommand]).isEmpty,
               !CGEventSource.buttonState(.combinedSessionState,button:.left),!CGEventSource.buttonState(.combinedSessionState,button:.right),
@@ -253,13 +269,13 @@ import ApplicationServices
         let rect=settings.body.rect(window.frame.size)
         let p=CGPoint(x:window.frame.minX+rect.midX,y:window.frame.minY+rect.minY+rect.height*0.78)
         var element:AXUIElement?
-        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),Float(p.x),Float(p.y),&element) == .success,let element else{return false}
+        guard active(window,at:p),AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),Float(p.x),Float(p.y),&element) == .success,let element else{return false}
         var pid:pid_t=0;guard AXUIElementGetPid(element,&pid) == .success,pid==window.owningApplication?.processID else{return false}
         guard let move=CGEvent(mouseEventSource:nil,mouseType:.mouseMoved,mouseCursorPosition:p,mouseButton:.left),
               let wheel=CGEvent(scrollWheelEvent2Source:nil,units:.pixel,wheelCount:1,wheel1:toTop ? 32000:Int32(-rect.height*0.18),wheel2:0,wheel3:0) else{return false}
         wheel.location=p;move.flags=[];wheel.flags=[];move.post(tap:.cghidEventTap)
         try? await Task.sleep(nanoseconds:100_000_000)
-        guard running,active(window) else{return false}
+        guard running,active(window,at:p) else{return false}
         wheel.post(tap:.cghidEventTap);return true
     }
     func sendInbox(_ ticket:InboxTicket,epoch:Int) async throws {

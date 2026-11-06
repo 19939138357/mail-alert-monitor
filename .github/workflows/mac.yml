@@ -1,0 +1,37 @@
+name: Mac monitor and pairing
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'macos/**'
+      - 'handset/mac/**'
+      - '.github/workflows/mac.yml'
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check portal adapters with synthetic pages
+        run: |
+          node macos/portal-login.test.cjs
+          node macos/portal-device.test.cjs
+      - name: Build both architectures and run monitor checks
+        run: bash macos/build.sh
+      - name: Build pairing tool and exercise private HTTPS transport
+        run: |
+          bash handset/mac/build-pair.sh
+          (cd handset/mac && python3 -m unittest discover -p 'test_*.py')
+          python3 handset/mac/tests/packaged_status.py dist
+      - name: Package and verify extracted applications
+        run: bash macos/package-release.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mac-desktop
+          path: dist/MailAlertMonitor-macOS.zip
+          if-no-files-found: error

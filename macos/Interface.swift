@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 private enum MonitorPage: String, CaseIterable {
-    case dashboard="监控台", regions="识别区域", settings="通知与账号", activity="运行记录"
+    case dashboard="监控总览", regions="识别区域", settings="通知与设置", activity="运行记录"
     var symbol:String {
         switch self {case .dashboard:return "square.grid.2x2";case .regions:return "viewfinder";case .settings:return "slider.horizontal.3";case .activity:return "clock.arrow.circlepath"}
     }
@@ -39,6 +39,9 @@ private struct MonitorCard<Content:View>: View {
 struct MainView: View {
     @ObservedObject var m:Monitor
     @StateObject private var navigation=MonitorNavigation()
+    @State private var choosingWindow=false
+    @State private var helpShown=false
+    private let accent=Color(red:0.03,green:0.40,blue:0.52)
     private var page:MonitorPage {get{navigation.page} nonmutating set{navigation.page=newValue}}
     @Environment(\.colorScheme) private var scheme
     private var editingLocked:Bool {m.running || m.openingSystem || m.busy || m.systemSaving || m.tokenSaving || m.unlockingNotifications}
@@ -53,7 +56,7 @@ struct MainView: View {
             if m.transportPaused{return "通知通道待修复"}
             return "正在监控"
         }
-        return m.offline ? "截图验证":"准备连接"
+        return m.offline ? "正在查看样本":(m.selection == 0 ? "等待选择邮箱":"邮箱已选择")
     }
     private var deliveryWarning:Bool {m.running && (m.notificationAvailability.requiresAttention || m.uncertainCount>0)}
     private var warningPage:MonitorPage {
@@ -62,22 +65,18 @@ struct MainView: View {
         return .settings
     }
     private var runSymbol:String {deliveryWarning ? "exclamationmark.triangle.fill":(m.running ? "waveform.path.ecg":(m.openingSystem ? "arrow.triangle.2.circlepath":"power"))}
-    private var runBadge:String {
-        guard m.running else{return "监控机 1"}
-        if !m.notificationAvailability.canOpenMail{return m.notificationAvailability == .checking ? "检查中":"仅扫描 · 推送暂停"}
-        return m.uncertainCount>0 ? "部分结果待核对":(m.reconnecting ? "重连中":"推送配置可用")
-    }
     private var startHint:String {
         if m.offline{return "当前是历史截图，连接实时邮箱后才能开始扫描。"}
-        if m.selection==0{return "一键连接会自动选择邮箱；也可在下方手动选择窗口。"}
-        if !m.screenAllowed{return "请先在“通知与账号”中开启屏幕录制。"}
+        if m.selection==0{return "请选择 Safari 中显示远程 Foxmail 收件箱的窗口。"}
+        if !m.screenAllowed{return "请先在“通知与设置”中开启屏幕录制。"}
         if m.settings.autoOpen && !m.accessibility{return "自动打开新邮件需要辅助功能权限。"}
         if m.busy{return "正在识别画面，请稍候。"}
         return "只打开未读邮件，逐页读取正文后通知；已读邮件不再处理。"
     }
     var body:some View {
+        GeometryReader { geo in
         HStack(spacing:0) {
-            sidebar
+            sidebar(compact:geo.size.width < 910)
             VStack(spacing:0) {
                 toolbar
                 if deliveryWarning {
@@ -100,7 +99,33 @@ struct MainView: View {
                     }.padding(28).frame(maxWidth:1220).frame(maxWidth:.infinity)
                 }
             }.background(scheme == .dark ? Color(nsColor:.windowBackgroundColor):Color(red:0.945,green:0.956,blue:0.975))
-        }.frame(minWidth:1040,minHeight:730).tint(Color(red:0.05,green:0.36,blue:0.95))
+        }
+        }.frame(minWidth:710,minHeight:520).tint(scheme == .dark ? Color(red:0.34,green:0.78,blue:0.87):accent)
+        .sheet(isPresented:$choosingWindow) {
+            VStack(alignment:.leading,spacing:18) {
+                HStack { Text("选择邮箱窗口").font(.title2.bold());Spacer();Button("完成"){choosingWindow=false}.keyboardShortcut(.cancelAction) }
+                if !m.screenAllowed {
+                    Text("开启屏幕录制权限后，重新打开应用即可选择 Foxmail 窗口。").foregroundStyle(.secondary)
+                    Button("打开屏幕录制设置"){m.requestScreen()}
+                } else {
+                    windowCard
+                    Text(m.status).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                }
+            }.padding(24).frame(width:510)
+            .task{if m.screenAllowed{await m.refresh()}}
+            .onChange(of:m.running){_,started in if started{choosingWindow=false}}
+        }
+        .sheet(isPresented:$helpShown) {
+            VStack(alignment:.leading,spacing:14) {
+                Text("开始使用").font(.title2.bold())
+                Text("1. 在 Safari 中打开 HTTPS 远程 Foxmail 收件箱，按“是否已读”排序。")
+                Text("2. 选择邮箱窗口，预览识别，并在“识别区域”框选列表和正文。")
+                Text("3. 在“通知与设置”保存自己的 PushPlus Token，测试后开始扫描。")
+                Text("安卓控制：将两个 Mac 应用放在同一文件夹，点“手机配对”，让手机连接相同的 Wi-Fi，然后输入电脑显示的六位码。")
+                Link("打开完整使用说明",destination:URL(string:"https://github.com/19939138357/mail-alert-monitor#readme")!)
+                HStack{Spacer();Button("完成"){helpShown=false}.keyboardShortcut(.defaultAction)}
+            }.padding(26).frame(width:440)
+        }
         .sheet(isPresented:$m.showSystemSettings,onDismiss:{m.systemPassword="";m.systemUsername=""}){accountSheet}
         .alert(m.notificationWarningTitle,isPresented:$m.showNotificationWarning) {
             Button("查看处理方法"){page = warningPage}
@@ -118,39 +143,61 @@ struct MainView: View {
             else if m.screenAllowed {await m.refresh()}
         }
     }
-    private var sidebar:some View {
-        VStack(alignment:.leading,spacing:0) {
-            HStack(spacing:10){AppMark(size:42);VStack(alignment:.leading,spacing:4){Text("邮件监控").font(.system(size:17,weight:.semibold));Text("监控机 1").font(.system(size:12)).foregroundStyle(.secondary)}}.padding(.top,28).padding(.bottom,34)
-            Text("工作空间").font(.system(size:11,weight:.semibold)).foregroundStyle(.secondary).padding(.leading,12).padding(.bottom,10)
+    private func sidebar(compact:Bool)->some View {
+        VStack(alignment:.leading,spacing:6) {
+            HStack(spacing:8) {
+                AppMark(size:38)
+                if !compact {Text("邮件监控").font(.system(size:17,weight:.semibold))}
+            }.padding(.top,22).padding(.bottom,25)
             ForEach(MonitorPage.allCases,id:\.self){item in
                 Button{page=item}label:{
-                    HStack(spacing:11){Image(systemName:item.symbol).font(.system(size:17)).frame(width:22);Text(item.rawValue).font(.system(size:14,weight:page==item ? .semibold:.medium));Spacer()}
-                        .padding(.horizontal,12).padding(.vertical,12).foregroundStyle(page==item ? .white:Color.primary.opacity(0.75))
-                        .background(page==item ? Color(red:0.08,green:0.37,blue:0.90):.clear,in:RoundedRectangle(cornerRadius:10))
-                }.buttonStyle(.plain).padding(.bottom,5).accessibilityAddTraits(page==item ? .isSelected:[])
+                    HStack(spacing:10) {
+                        Image(systemName:item.symbol).font(.system(size:16,weight:.medium)).frame(width:20)
+                        if !compact {Text(item.rawValue).font(.system(size:13,weight:page==item ? .semibold:.regular));Spacer()}
+                    }.padding(.horizontal,11).frame(height:38)
+                     .foregroundStyle(page==item ? Color.white:Color.primary)
+                     .background(page==item ? accent:.clear,in:RoundedRectangle(cornerRadius:8))
+                }.buttonStyle(.plain).accessibilityLabel(item.rawValue).help(item.rawValue)
+                 .accessibilityAddTraits(page==item ? .isSelected:[])
             }
-            Spacer(minLength:24)
-            VStack(alignment:.leading,spacing:10) {
-                Text("本机权限").font(.system(size:11,weight:.semibold)).foregroundStyle(.secondary)
-                permissionBadge("屏幕录制",m.screenAllowed)
-                permissionBadge("辅助功能",m.accessibility)
-                if !m.screenAllowed || !m.accessibility{Button("前往设置"){page = .settings}.font(.caption)}
-            }.padding(14).frame(maxWidth:.infinity,alignment:.leading).background(Color.primary.opacity(0.045),in:RoundedRectangle(cornerRadius:12))
-            Button{NSWorkspace.shared.open(Storage.project.appendingPathComponent("README.md"))}label:{Label("使用说明",systemImage:"questionmark.circle")}.buttonStyle(.plain).font(.system(size:12)).foregroundStyle(.secondary).padding(.top,20).padding(.bottom,10)
-            Text("本机识别 · v"+(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "1.3.15")).font(.system(size:10)).foregroundStyle(.secondary).padding(.bottom,18)
-        }.padding(.horizontal,18).frame(width:196)
-            .background(scheme == .dark ? Color(red:0.12,green:0.14,blue:0.18):Color(red:0.885,green:0.911,blue:0.946))
-            .overlay(alignment:.trailing){Rectangle().fill(Color.primary.opacity(0.06)).frame(width:1)}
+            Spacer()
+            Divider()
+            sidebarAction("手机配对",symbol:"iphone.gen3",compact:compact) {
+                let peer=Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("手机配对.app")
+                guard Bundle(url:peer)?.bundleIdentifier=="org.example.mailalertmonitor.phonepair" else {
+                    m.note("未找到手机配对工具。请将安装包中的两个 App 放在同一文件夹。");page = .dashboard;return
+                }
+                NSWorkspace.shared.openApplication(at:peer,configuration:.init()){_,error in
+                    if error != nil {Task{@MainActor in m.note("无法打开手机配对工具，请从安装包重新解压。");page = .dashboard}}
+                }
+            }
+            sidebarAction("使用说明",symbol:"questionmark.circle",compact:compact){helpShown=true}
+        }.padding(.horizontal,compact ? 9:13).padding(.bottom,14).frame(width:compact ? 62:162)
+            .background(scheme == .dark ? Color(red:0.105,green:0.145,blue:0.16):Color(red:0.88,green:0.92,blue:0.93))
+            .overlay(alignment:.trailing){Divider()}
+    }
+    private func sidebarAction(_ title:String,symbol:String,compact:Bool,action:@escaping ()->Void)->some View {
+        Button(action:action){HStack(spacing:10){Image(systemName:symbol).frame(width:20)
+            if !compact{Text(title);Spacer()}
+        }.padding(.horizontal,11).frame(height:32)}
+            .font(.callout).foregroundStyle(.secondary).buttonStyle(.plain).help(title).accessibilityLabel(title)
     }
     private var toolbar:some View {
         HStack(spacing:14) {
-            VStack(alignment:.leading,spacing:5){Text(page.rawValue).font(.system(size:25,weight:.bold));Text(page.detail).font(.system(size:12)).foregroundStyle(.secondary)}
+            VStack(alignment:.leading,spacing:5){Text(page.rawValue).font(.system(size:25,weight:.bold));Text(page == .dashboard ? "监控机 1":page.detail).font(.system(size:12)).foregroundStyle(.secondary)}
             Spacer(minLength:12)
             if m.openingSystem {
                 ProgressView().controlSize(.small)
                 Button("取消等待"){m.cancelConnection()}.controlSize(.large)
             } else if m.running {
                 Button{m.stop()}label:{Label("停止监控",systemImage:"stop.fill")}.controlSize(.large).buttonStyle(.bordered)
+            } else if !SystemPortal.isAdapted {
+                Button {
+                    if m.selection == 0 || m.offline {choosingWindow=true}
+                    else {page = .dashboard;m.start()}
+                } label:{Label(m.selection == 0 || m.offline ? "选择邮箱窗口":"开始监控",systemImage:m.selection == 0 || m.offline ? "macwindow":"play.fill")}
+                    .controlSize(.large).buttonStyle(.borderedProminent)
+                    .disabled(editingLocked || m.testInFlight || m.startupError != nil)
             } else {
                 Button{page = .dashboard;m.connectSystem()}label:{Label("连接监控机 1",systemImage:"safari")}.controlSize(.large).buttonStyle(.borderedProminent)
                     .disabled(m.busy || m.systemSaving || m.tokenSaving || m.testInFlight || m.startupError != nil)
@@ -162,33 +209,50 @@ struct MainView: View {
     private var dashboard:some View {
         Group {
             statusPanel
-            HStack(spacing:16) {
-                metric("实际扫描",value:String(m.frames),unit:"次",symbol:"viewfinder")
-                metric("待处理邮件",value:String(m.queuedCount),unit:"封",symbol:"tray.full")
-                metric("发送结果待核对",value:String(m.uncertainCount),unit:"封",symbol:"bell.badge")
+            MonitorCard {
+                HStack {
+                    Label("最近邮件",systemImage:"tray").font(.headline)
+                    Spacer()
+                    Button("查看全部"){page = .activity}.buttonStyle(.borderless)
+                }
+                Divider()
+                if m.inbox.tickets.isEmpty {
+                    HStack(spacing:12) {
+                        Image(systemName:"tray").font(.title2).foregroundStyle(.secondary)
+                        VStack(alignment:.leading,spacing:4) {
+                            Text("暂无邮件记录").font(.callout.bold())
+                            Text("开始扫描后，新发现的未读邮件会显示在这里。").font(.callout).foregroundStyle(.secondary)
+                        }
+                    }.padding(.vertical,8)
+                }
+                ForEach(Array(m.inbox.tickets.suffix(4).reversed()),id:\.id){ticket in
+                    mailRow(ticket)
+                    if ticket.id != m.inbox.tickets.suffix(4).first?.id {Divider()}
+                }
             }
             previewCard(calibrating:false)
             windowCard
         }
     }
     private var statusPanel:some View {
-        VStack(alignment:.leading,spacing:18) {
-            HStack(alignment:.top,spacing:14) {
-                Image(systemName:runSymbol).font(.system(size:24,weight:.medium)).frame(width:48,height:48).background(.white.opacity(0.15),in:RoundedRectangle(cornerRadius:13))
-                VStack(alignment:.leading,spacing:7){Text(runLabel).font(.system(size:23,weight:.semibold));Text(m.running && !m.notificationAvailability.canOpenMail ? m.notificationAvailability.detail:m.status).font(.system(size:13)).foregroundStyle(.white.opacity(0.88)).fixedSize(horizontal:false,vertical:true)}
+        VStack(alignment:.leading,spacing:16) {
+            HStack(alignment:.top,spacing:12) {
+                Image(systemName:runSymbol).font(.title2).frame(width:42,height:42)
+                    .background(.white.opacity(0.13),in:RoundedRectangle(cornerRadius:10))
+                VStack(alignment:.leading,spacing:5) {
+                    Text(runLabel).font(.system(size:23,weight:.semibold))
+                    Text(m.running && !m.notificationAvailability.canOpenMail ? m.notificationAvailability.detail:m.status)
+                        .font(.callout).foregroundStyle(.white.opacity(0.89)).fixedSize(horizontal:false,vertical:true)
+                }
                 Spacer()
-                if m.openingSystem{ProgressView().tint(.white).controlSize(.small)}
-                else{Text(runBadge).font(.system(size:11,weight:.semibold)).padding(.horizontal,12).padding(.vertical,7).background(.white.opacity(0.15),in:Capsule())}
+                if m.openingSystem {ProgressView().controlSize(.small).tint(.white)}
             }
-            HStack(spacing:16) {
-                step("本机授权",number:1,done:m.screenAllowed && m.accessibility,active:!m.screenAllowed || !m.accessibility)
-                Image(systemName:"chevron.right").font(.caption).opacity(0.5)
-                step("连接邮箱",number:2,done:m.running,active:m.openingSystem && m.connectionStep<=2)
-                Image(systemName:"chevron.right").font(.caption).opacity(0.5)
-                step("推送可用",number:3,done:m.running && m.notificationAvailability.canOpenMail,active:m.running && !m.notificationAvailability.canOpenMail)
-                Spacer()
+            Rectangle().fill(.white.opacity(0.24)).frame(height:1)
+            HStack(spacing:0) {
+                metric("实际扫描",value:m.frames,unit:"次")
+                metric("待处理邮件",value:m.queuedCount,unit:"封")
+                metric("结果待核对",value:m.uncertainCount,unit:"封")
             }
-            Text("入口：监控机 1 → 工具栏左侧浏览器按钮。只处理未读邮件；有未读时自动进入邮箱读取完整正文。").font(.system(size:11)).foregroundStyle(.white.opacity(0.8)).fixedSize(horizontal:false,vertical:true)
             if m.portalNeedsUnlock {
                 Divider().overlay(.white.opacity(0.22))
                 HStack{Text("完成一次系统账号授权，连接过期后才能自动登录。").font(.caption);Spacer();Button(m.unlockingPortal ? "等待授权…":"授权连接"){Task{await m.unlockPortal()}}.disabled(m.unlockingPortal).buttonStyle(.borderedProminent)}
@@ -202,25 +266,43 @@ struct MainView: View {
                 }
             }
         }.padding(24).foregroundStyle(.white).frame(maxWidth:.infinity,alignment:.leading)
-            .background(LinearGradient(colors:deliveryWarning ? [Color(red:0.72,green:0.17,blue:0.12),Color(red:0.40,green:0.07,blue:0.07)]:[Color(red:0.08,green:0.29,blue:0.68),Color(red:0.07,green:0.16,blue:0.38)],startPoint:.topLeading,endPoint:.bottomTrailing),in:RoundedRectangle(cornerRadius:20))
+            .background(deliveryWarning ? Color(red:0.48,green:0.23,blue:0.13):Color(red:0.07,green:0.25,blue:0.31),in:RoundedRectangle(cornerRadius:15))
     }
-    private func step(_ title:String,number:Int,done:Bool,active:Bool)->some View {
-        HStack(spacing:7){
-            ZStack{Circle().fill(.white.opacity(done || active ? 0.22:0.09)).frame(width:24,height:24);if done{Image(systemName:"checkmark").font(.system(size:10,weight:.bold))}else{Text(String(number)).font(.system(size:11,weight:.semibold))}}
-            Text(title).font(.system(size:12,weight:active ? .semibold:.regular)).opacity(done || active ? 1:0.7)
-        }
+    private func metric(_ title:String,value:Int,unit:String)->some View {
+        VStack(alignment:.leading,spacing:3) {
+            Text(title).font(.caption).foregroundStyle(.white.opacity(0.84))
+            HStack(alignment:.firstTextBaseline,spacing:4) {
+                Text(String(value)).font(.system(size:24,weight:.medium)).monospacedDigit()
+                Text(unit).font(.caption).foregroundStyle(.white.opacity(0.8))
+            }
+        }.frame(maxWidth:.infinity,alignment:.leading)
     }
-    private func metric(_ title:String,value:String,unit:String,symbol:String)->some View {
-        MonitorCard {
-            HStack{Text(title).font(.system(size:12)).foregroundStyle(.secondary);Spacer();Image(systemName:symbol).foregroundStyle(.blue)}
-            HStack(alignment:.firstTextBaseline,spacing:6){Text(value).font(.system(size:27,weight:.semibold,design:.rounded)).monospacedDigit();Text(unit).font(.caption).foregroundStyle(.secondary)}.padding(.top,6)
+    private func mailRow(_ ticket:InboxTicket)->some View {
+        let color:Color
+        let symbol:String
+        switch ticket.state {
+        case .accepted,.duplicate: color = .secondary;symbol = "checkmark.circle"
+        case .rejected,.uncertain: color = .orange;symbol = "exclamationmark.circle.fill"
+        default: color = scheme == .dark ? .cyan:accent;symbol = "envelope"
         }
+        return HStack(alignment:.top,spacing:11) {
+            Image(systemName:symbol).foregroundStyle(color).frame(width:18).padding(.top,2)
+            VStack(alignment:.leading,spacing:4) {
+                Text(ticket.content?.subject ?? ticket.subject).font(.system(size:13,weight:.semibold))
+                    .textSelection(.enabled).lineLimit(2)
+                Text(ticket.sender+" · "+(ticket.content?.sentAt ?? (ticket.day+" "+ticket.timeLabel)))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            Text(ticket.receivedConfirmedAt != nil ? "本人已确认收到":ticket.state.label)
+                .font(.caption).foregroundStyle(color)
+        }.padding(.vertical,4)
     }
     private func previewCard(calibrating:Bool)->some View {
         MonitorCard {
             VStack(alignment:.leading,spacing:14) {
                 HStack{
-                    Label(m.offline ? "历史截图验证":"邮箱画面",systemImage:m.offline ? "photo":"display").font(.system(size:15,weight:.semibold))
+                    Label(m.offline ? "截图验证":"邮箱画面",systemImage:m.offline ? "photo":"display").font(.system(size:15,weight:.semibold))
                     Spacer();Text(m.lastScan).font(.system(size:11)).foregroundStyle(.secondary)
                     if !calibrating{Button("校准区域"){page = .regions}.buttonStyle(.borderless).disabled(m.running || m.openingSystem)}
                 }
@@ -230,8 +312,8 @@ struct MainView: View {
                     VStack(spacing:12) {
                         Image(systemName:"macwindow.badge.plus").font(.system(size:40,weight:.light)).foregroundStyle(Color(red:0.38,green:0.66,blue:1))
                         Text("连接后，邮箱画面会显示在这里").font(.system(size:16,weight:.medium)).foregroundStyle(.white)
-                        Text("点击右上角“连接监控机 1”，或选择已有窗口进行预览。\n也可导入历史截图，先验证识别效果。").font(.system(size:12)).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.64)).lineSpacing(4)
-                        Button("查看历史样本"){Task{await sample()}}.buttonStyle(.borderedProminent).disabled(editingLocked).padding(.top,2)
+                        Text("先选择显示 Foxmail 的窗口，再点“预览识别”。").font(.system(size:12)).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.64)).lineSpacing(4)
+                        Button("查看示例截图"){Task{await sample()}}.buttonStyle(.borderedProminent).disabled(editingLocked).padding(.top,2)
                     }.frame(maxWidth:.infinity).frame(height:calibrating ? 340:260).background(Color(red:0.075,green:0.095,blue:0.145),in:RoundedRectangle(cornerRadius:12))
                 }
                 HStack(spacing:14){Label("列表区域",systemImage:"square.dashed").foregroundStyle(.blue);Label("正文区域",systemImage:"square.dashed").foregroundStyle(.green);Spacer();if m.busy{ProgressView().controlSize(.mini);Text("正在识别").foregroundStyle(.secondary)}}.font(.system(size:11))
@@ -260,7 +342,7 @@ struct MainView: View {
                 VStack(alignment:.leading,spacing:14){
                     HStack{Text("识别范围").font(.headline);Spacer();Picker("拖选区域",selection:$m.regionMode){Text("查看").tag(0);Text("邮件列表").tag(1);Text("邮件正文").tag(2)}.pickerStyle(.segmented).frame(width:310).disabled(editingLocked)}
                     Text(m.offline ? "选择“邮件列表”并在图片上拖选，再点“验证选区”。需包含左侧未读小蓝点、发件人和主题。":"选择“邮件列表”或“邮件正文”，在下方画面上拖出范围，松手即保存。列表需包含左侧未读小蓝点、发件人、主题和时间；正文需包含邮件头和内容。").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-                    HStack{Button("历史样本"){Task{await sample()}};Button("导入截图"){Task{await m.importScreenshot()}};if m.offline{Button("验证选区"){Task{await m.verifyOfflineRegion()}}.buttonStyle(.borderedProminent)};Spacer()}.disabled(editingLocked)
+                    HStack{Button("示例截图"){Task{await sample()}};Button("导入截图"){Task{await m.importScreenshot()}};if m.offline{Button("验证选区"){Task{await m.verifyOfflineRegion()}}.buttonStyle(.borderedProminent)};Spacer()}.disabled(editingLocked)
                 }
             }
             previewCard(calibrating:true)
@@ -277,12 +359,13 @@ struct MainView: View {
                     Text("先保存队列，再点击未读邮件、逐页读取正文，最后发送实际内容。读取不完整时保留等待，不发送空提示。请将 Foxmail 按“是否已读”排序、收起“已读”组，并保持远程邮箱连接。发送结果不明确时不会自动重发。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                 }
             }
-            MonitorCard {
+            if SystemPortal.isAdapted { MonitorCard {
                 HStack(alignment:.top,spacing:16){settingIcon("person.crop.circle.badge.checkmark");VStack(alignment:.leading,spacing:8){Text("系统账号").font(.headline);Text(m.hasSystemCredentials ? "已安全保存在本机，可用于一键连接。":"首次连接前，请填写系统用户名与口令。").font(.callout).foregroundStyle(.secondary);Text("仅用于 portal.example.com:9978").font(.caption).foregroundStyle(.secondary)};Spacer();Button(m.hasSystemCredentials ? "管理账号":"设置账号"){m.systemError="";m.showSystemSettings=true}.disabled(editingLocked)}
                 if m.portalNeedsUnlock {
                     Divider()
                     HStack{Text("系统账号需要本机授权，授权后会自动继续重连。").font(.callout);Spacer();Button(m.unlockingPortal ? "等待授权…":"授权连接"){Task{await m.unlockPortal()}}.disabled(m.unlockingPortal)}
                 }
+            }
             }
             MonitorCard {
                 VStack(alignment:.leading,spacing:16) {
@@ -300,7 +383,7 @@ struct MainView: View {
                     Divider()
                     permissionRow("辅助功能",detail:"点击监控机 1 浏览器入口，以及自动打开新邮件。",allowed:m.accessibility,action:m.requestAccessibility)
                     Divider();Toggle("自动打开新邮件",isOn:$m.settings.autoOpen).disabled(editingLocked)
-                    Text("发现未读后自动读取；连接断开、标签关闭或系统会话过期时，会自动恢复监控机 1。鼠标键盘空闲两秒后操作，失败后间隔5至60秒继续尝试；停止监控会同时停止重连。系统验证需本人完成，完成后会继续。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                    Text(SystemPortal.isAdapted ? "远程会话中断时自动重连。鼠标键盘空闲后开始操作。":"请让所选邮箱保持可见。程序会等鼠标和键盘空闲后再打开未读邮件。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                     Button("重新检查权限"){m.permissions();m.note(m.screenAllowed && m.accessibility ? "本机录屏和辅助功能权限均可用。":"权限尚未齐全，请在系统设置中添加当前应用后重开。")}.disabled(editingLocked)
                 }
             }
@@ -331,11 +414,7 @@ struct MainView: View {
                     HStack{Text("通知队列").font(.headline);Spacer();Text("待处理 \(m.queuedCount) · 待核对 \(m.uncertainCount)").font(.caption).foregroundStyle(.secondary)}
                     if m.inbox.tickets.isEmpty{Text("扫描到未读邮件后，逐封处理结果会显示在这里。").font(.callout).foregroundStyle(.secondary)}
                     ForEach(Array(m.inbox.tickets.suffix(60).reversed()),id:\.id){ticket in
-                        HStack(alignment:.top,spacing:12){
-                            Image(systemName:ticket.state == .accepted ? "checkmark.circle.fill":"envelope.badge").foregroundStyle(ticket.state == .accepted ? .green:.orange)
-                            VStack(alignment:.leading,spacing:4){Text(ticket.subject).font(.system(size:13,weight:.medium));Text(ticket.sender+" · "+ticket.timeLabel).font(.caption).foregroundStyle(.secondary)}
-                            Spacer();Text(ticket.receivedConfirmedAt != nil ? "本人已确认收到":ticket.state.label).font(.caption).foregroundStyle(.secondary)
-                        }.padding(.vertical,5)
+                        mailRow(ticket)
                     }
                     Text("服务受理后请核对手机。待核对表示发送中断或超时，可能已送达；修复 Token 后仅重试明确被拒绝的通知。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                 }
@@ -354,7 +433,6 @@ struct MainView: View {
         }
     }
     private func settingIcon(_ symbol:String)->some View {Image(systemName:symbol).font(.system(size:20)).foregroundStyle(.blue).frame(width:42,height:42).background(Color.blue.opacity(0.09),in:RoundedRectangle(cornerRadius:11))}
-    private func permissionBadge(_ title:String,_ allowed:Bool)->some View {HStack(spacing:8){Image(systemName:allowed ? "checkmark.circle.fill":"exclamationmark.circle.fill").foregroundStyle(allowed ? .green:.orange);Text(title).font(.system(size:12));Spacer()}}
     private func permissionRow(_ title:String,detail:String,allowed:Bool,action:@escaping ()->Void)->some View {
         HStack(spacing:12){Image(systemName:allowed ? "checkmark.circle.fill":"exclamationmark.circle.fill").font(.title3).foregroundStyle(allowed ? .green:.orange);VStack(alignment:.leading,spacing:4){Text(title).font(.system(size:13,weight:.medium));Text(detail).font(.caption).foregroundStyle(.secondary)};Spacer();Text(allowed ? "已开启":"待授权").font(.caption).foregroundStyle(.secondary);Button(allowed ? "查看设置":"开启权限",action:action).disabled(editingLocked)}
     }
@@ -370,7 +448,7 @@ struct MainView: View {
         }.padding(28).frame(width:440).interactiveDismissDisabled(m.systemSaving)
     }
     private func sample() async {
-        guard let url=Bundle.main.url(forResource:"MailSample",withExtension:"png") else{m.note("历史样本未安装，请使用导入截图。");return}
+        guard let url=Bundle.main.url(forResource:"MailSample",withExtension:"png") else{m.note("示例截图未安装，请使用导入截图。");return}
         await m.importScreenshot(url)
     }
     private func persistOptions(){guard !m.running else{return};do{try m.save()}catch{m.note("设置保存失败："+error.localizedDescription)}}

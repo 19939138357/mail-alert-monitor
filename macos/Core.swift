@@ -156,7 +156,6 @@ struct Ledger: Codable {
     mutating func record(_ event: MailEvent, _ status: String) { records[Rules.hash(event.id)]=status }
 }
 enum Storage {
-    static var project: URL { Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent() }
     static var root: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MailAlertMonitorOpenSource", isDirectory: true)
