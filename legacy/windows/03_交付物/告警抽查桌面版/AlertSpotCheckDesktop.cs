@@ -44,7 +44,13 @@ internal static class AlertSpotCheckDesktopProgram
             return;
         }
         if (args.Length >= 3 && args[0] == "--visual-check") { var check = new AlertSpotCheckForm(true); check.ClientSize = new Size(int.Parse(args[1]), int.Parse(args[2])); Application.Run(check); return; }
-        var app = new AlertSpotCheckForm(false);
+        AlertSpotCheckForm app;
+        try { app = new AlertSpotCheckForm(false); }
+        catch (Exception error)
+        {
+            MessageBox.Show("请先将完整 ZIP 解压到可写的文件夹，再打开程序。\n" + error.Message, "无法打开邮件监控");
+            return;
+        }
         if (args.Length > 0 && args[0] == "--system-login") app.Shown += delegate { app.OpenSystemLogin(); };
         Application.Run(app);
     }
@@ -88,14 +94,19 @@ internal sealed class AlertSpotCheckForm : Form
         _projectRoot = FindProjectRoot();
         _monitorScript = Path.Combine(_projectRoot, "Monitor-WindowKeywords.ps1");
         _configFile = Path.Combine(_projectRoot, "monitor_config.json");
+        if (!preview && !File.Exists(_configFile))
+        {
+            try { File.Copy(Path.Combine(_projectRoot, "monitor_config.example.json"), _configFile, false); }
+            catch (IOException) { if (!File.Exists(_configFile)) throw; }
+        }
         _logFile = Path.Combine(_projectRoot, "monitor.log");
         _notificationSettingsPath = Path.Combine(_projectRoot, @"04_资料\私密配置\notification_settings.json");
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Text = "屏幕告警手机推送";
+        Text = "邮件监控";
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(960, 654);
-        MinimumSize = new Size(900, 640);
+        ClientSize = new Size(980, 692);
+        MinimumSize = new Size(780, 620);
         Font = new Font(DesktopTheme.UiFont, 9.5F);
         BackColor = DesktopTheme.Surface;
         string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "screen-alert.ico");
@@ -122,7 +133,7 @@ internal sealed class AlertSpotCheckForm : Form
         Controls.Add(shell);
 
         var sidebar = Grid(1, 7, DesktopTheme.Canvas);
-        sidebar.Padding = new Padding(18, 26, 18, 18);
+        sidebar.Padding = new Padding(16, 20, 16, 18);
         sidebar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         foreach (int h in new int[] { 74, 28, 40, 46, 40 }) sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
         sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -137,8 +148,8 @@ internal sealed class AlertSpotCheckForm : Form
         var brand = Grid(1, 2, DesktopTheme.Canvas);
         brand.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
         brand.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
-        brand.Controls.Add(NewLabel("告警助手", 13, FontStyle.Bold, DesktopTheme.Ink), 0, 0);
-        brand.Controls.Add(NewLabel("手机推送", 9, FontStyle.Regular, DesktopTheme.Muted), 0, 1);
+        brand.Controls.Add(NewLabel("邮件监控", 13, FontStyle.Bold, DesktopTheme.Ink), 0, 0);
+        brand.Controls.Add(NewLabel("Windows", 9, FontStyle.Regular, DesktopTheme.Muted), 0, 1);
         brand.Dock = DockStyle.Top; brand.Height = 47; identity.Controls.Add(brand, 1, 0);
         sidebar.Controls.Add(identity, 0, 0);
         var overview = NavigationButton("监控概览", DesktopTheme.MonitorSvg, true);
@@ -151,25 +162,12 @@ internal sealed class AlertSpotCheckForm : Form
         var logs = NavigationButton("运行日志", DesktopTheme.LogSvg, false);
         logs.Click += delegate { OpenPath(_logFile); };
         sidebar.Controls.Add(logs, 0, 4);
-        var quickAccess = Grid(1, 4, DesktopTheme.Canvas);
-        quickAccess.Dock = DockStyle.Top;
-        quickAccess.Height = 153;
-        quickAccess.Padding = new Padding(0, 28, 0, 0);
-        quickAccess.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        quickAccess.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        quickAccess.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-        quickAccess.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        quickAccess.Controls.Add(NewLabel("示例企业系统", 9, FontStyle.Regular, DesktopTheme.Muted), 0, 0);
-        var loginButton = NewButton("一键登录系统", false);
-        loginButton.BackColor = DesktopTheme.Surface;
-        loginButton.ForeColor = DesktopTheme.Accent;
-        loginButton.Click += delegate { OpenSystemLogin(); };
-        quickAccess.Controls.Add(loginButton, 0, 1);
-        quickAccess.Controls.Add(NewLabel("在 Edge 浏览器中打开", 8.5F, FontStyle.Regular, DesktopTheme.Muted), 0, 2);
-        _loginStatusLabel = NewLabel("", 8.5F, FontStyle.Regular, DesktopTheme.Muted);
-        _loginStatusLabel.TextAlign = ContentAlignment.TopLeft;
-        quickAccess.Controls.Add(_loginStatusLabel, 0, 3);
-        sidebar.Controls.Add(quickAccess, 0, 5);
+        var configButton = NavigationButton("监控设置", DesktopTheme.SettingsSvg, false);
+        configButton.Dock = DockStyle.Top;
+        configButton.Height = 40;
+        configButton.Click += delegate { OpenMonitorSettings(); };
+        sidebar.Controls.Add(configButton, 0, 5);
+        _loginStatusLabel = NewLabel("", 9, FontStyle.Regular, DesktopTheme.Muted);
         var health = Grid(1, 2, DesktopTheme.Canvas);
         health.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
         health.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
@@ -192,7 +190,7 @@ internal sealed class AlertSpotCheckForm : Form
         var header = Grid(2, 1, DesktopTheme.Surface);
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38));
-        header.Controls.Add(NewLabel("屏幕监控", 18, FontStyle.Bold, DesktopTheme.Ink), 0, 0);
+        header.Controls.Add(NewLabel("监控概览", 18, FontStyle.Bold, DesktopTheme.Ink), 0, 0);
         var more = NewButton("", false);
         more.IconSvg = DesktopTheme.MoreSvg.Replace("currentColor", "#6E6E73");
         more.AccessibleName = "更多选项";
@@ -200,17 +198,19 @@ internal sealed class AlertSpotCheckForm : Form
         more.DefaultBack = DesktopTheme.Canvas;
         more.BorderWidth = 0;
         var menu = new ContextMenuStrip { Font = new Font(DesktopTheme.UiFont, 9.5F) };
-        menu.Items.Add("打开监控配置", null, delegate { OpenPath(_configFile); });
-        menu.Items.Add("打开程序目录", null, delegate { OpenPath(_projectRoot); });
+        menu.Items.Add("编辑监控设置", null, delegate { OpenMonitorSettings(); });
+        menu.Items.Add("配置文件所在位置", null, delegate { OpenPath(_projectRoot); });
+
         more.Click += delegate { menu.Show(more, new Point(0, more.Height)); };
         header.Controls.Add(more, 1, 0);
         main.Controls.Add(header, 0, 0);
 
-        var status = Grid(2, 1, DesktopTheme.Surface);
-        status.Padding = new Padding(0, 20, 0, 20);
+        var status = Grid(2, 1, DesktopTheme.Hero);
+        status.Padding = new Padding(18, 12, 18, 12);
+        status.Margin = new Padding(0, 0, 0, 12);
         status.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         status.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
-        var statusText = Grid(1, 2, DesktopTheme.Surface);
+        var statusText = Grid(1, 2, DesktopTheme.Hero);
         statusText.Margin = new Padding(0, 0, 24, 0);
         statusText.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         statusText.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -221,12 +221,12 @@ internal sealed class AlertSpotCheckForm : Form
         statusText.Controls.Add(_statusLabel, 0, 0);
         statusText.Controls.Add(_lastEventLabel, 0, 1);
         status.Controls.Add(statusText, 0, 0);
-        var actions = Grid(1, 3, DesktopTheme.Surface);
+        var actions = Grid(1, 3, DesktopTheme.Hero);
         actions.Padding = new Padding(0, 8, 0, 0);
         actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 10));
         actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        _startButton = NewButton("一键启动", true);
+        _startButton = NewButton("启动监控", true);
         _startButton.IconSvg = DesktopTheme.PlaySvg.Replace("currentColor", "#FFFFFF");
         _startButton.IconSize = new Size(15, 15);
         _startButton.Click += delegate { StartMonitor(); };
@@ -250,8 +250,8 @@ internal sealed class AlertSpotCheckForm : Form
         _intervalLabel = NewLabel("约 30 秒", 10, FontStyle.Regular, DesktopTheme.Muted);
         _intervalLabel.TextAlign = ContentAlignment.MiddleRight;
         prefs.Controls.Add(_intervalLabel, 1, 1);
-        prefs.Controls.Add(NewLabel("验证码", 10, FontStyle.Regular, DesktopTheme.Ink), 0, 2);
-        _ruleLabel = NewLabel("告警 6 位 / 电话 4 位", 10, FontStyle.Regular, DesktopTheme.Muted);
+        prefs.Controls.Add(NewLabel("识别模式", 10, FontStyle.Regular, DesktopTheme.Ink), 0, 2);
+        _ruleLabel = NewLabel("屏幕关键词", 10, FontStyle.Regular, DesktopTheme.Muted);
         _ruleLabel.TextAlign = ContentAlignment.MiddleRight;
         prefs.Controls.Add(_ruleLabel, 1, 2);
         preferences.Controls.Add(prefs);
@@ -259,7 +259,7 @@ internal sealed class AlertSpotCheckForm : Form
         var notifyActions = Grid(2, 1, DesktopTheme.Surface);
         notifyActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         notifyActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 116));
-        notifyActions.Controls.Add(NewLabel("识别新告警后，直接提醒到手机。", 9, FontStyle.Regular, DesktopTheme.Muted), 0, 0);
+        notifyActions.Controls.Add(NewLabel("首次使用，请先设置通知渠道并测试收件。", 9, FontStyle.Regular, DesktopTheme.Muted), 0, 0);
         var test = NewLink("发送测试通知");
         test.LinkClicked += delegate { RunPowerShellVisible("Test-VerificationPhone.ps1"); };
         notifyActions.Controls.Add(test, 1, 0);
@@ -269,22 +269,34 @@ internal sealed class AlertSpotCheckForm : Form
         logHeading.Padding = new Padding(0, 9, 0, 0);
         logHeading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         logHeading.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
-        logHeading.Controls.Add(NewLabel("最近活动", 11, FontStyle.Bold, DesktopTheme.Ink), 0, 0);
+        logHeading.Controls.Add(NewLabel("运行记录", 11, FontStyle.Bold, DesktopTheme.Ink), 0, 0);
         var rawLog = NewLink("查看完整日志");
         rawLog.LinkClicked += delegate { OpenPath(_logFile); };
         logHeading.Controls.Add(rawLog, 1, 0);
         main.Controls.Add(logHeading, 0, 4);
-        _logBox = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = DesktopTheme.Surface, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Margin = new Padding(0, 8, 0, 0), AccessibleName = "最近活动" };
+        _logBox = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = DesktopTheme.Surface, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Margin = new Padding(0, 8, 0, 0), AccessibleName = "运行记录" };
         _logBox.SizeChanged += delegate { ResizeLogEntries(); };
         main.Controls.Add(_logBox, 0, 5);
         var footer = Grid(1, 2, DesktopTheme.Surface);
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        footer.Controls.Add(NewLabel("保持目标画面在前台，鼠标键盘空闲 2 秒后开始识别。", 9, FontStyle.Regular, DesktopTheme.Muted), 0, 0);
+        footer.Controls.Add(NewLabel("使用屏幕识别时，请保持邮箱画面可见。", 9, FontStyle.Regular, DesktopTheme.Muted), 0, 0);
         _updatedLabel = NewLabel("", 8, FontStyle.Regular, DesktopTheme.Muted);
         footer.Controls.Add(_updatedLabel, 0, 1);
         main.Controls.Add(footer, 0, 6);
         ResumeLayout(true);
+    }
+
+    private void OpenMonitorSettings()
+    {
+        if (_preview) return;
+        if (FindMonitorPid() > 0)
+        {
+            MessageBox.Show(this, "请先停止监控，再调整识别设置。", "监控设置");
+            return;
+        }
+        try { MonitorSettings.Show(this, _configFile); RefreshStatus(); }
+        catch (Exception error) { ShowError("无法打开监控设置：" + error.Message); }
     }
 
     private static TableLayoutPanel Grid(int columns, int rows, Color background)
@@ -452,7 +464,7 @@ internal sealed class AlertSpotCheckForm : Form
                 _monitorProcess = null;
             }
             _startButton.Enabled = !running;
-            _startButton.Text = running ? "监控已启动" : "一键启动";
+            _startButton.Text = running ? "监控已启动" : "启动监控";
             _startButton.AccessibleName = _startButton.Text;
             _stopButton.Enabled = running;
             string tail = ReadLogTail(160);
@@ -469,9 +481,9 @@ internal sealed class AlertSpotCheckForm : Form
             nextHint = "持续检查目标画面，发现新的有效告警后推送到手机。";
             if (!running)
             {
-                nextStatus = "准备就绪";
+                nextStatus = "监控已停止";
                 nextStatusColor = DesktopTheme.Ink;
-                nextHint = "启动后自动识别屏幕告警，\n有新验证码时推送到手机。";
+                nextHint = "打开邮箱并保持画面可见，然后启动监控。";
                 if (!string.IsNullOrWhiteSpace(_lastProcessError))
                 {
                     nextStatus = "监控已中断";
@@ -481,7 +493,7 @@ internal sealed class AlertSpotCheckForm : Form
             }
             else if (state == "WaitingForTarget" || state == "WaitingForIdle")
             {
-                nextStatus = "等待目标窗口";
+                nextStatus = "等待邮箱画面";
                 nextStatusColor = DesktopTheme.Warning;
                 nextHint = "监控已启动。将目标窗口切到前台，停止操作鼠标键盘 2 秒。";
             }
@@ -515,7 +527,7 @@ internal sealed class AlertSpotCheckForm : Form
                 _startButton.Enabled = false;
                 nextStatus = "请检查程序文件";
                 nextStatusColor = DesktopTheme.Danger;
-                nextHint = "请通过桌面快捷方式打开 D 盘项目中的完整程序。";
+                nextHint = "重新解压完整下载包，并从文件夹内打开邮件监控。";
             }
             // Assign only the final state; intermediate labels caused visible repaint flicker.
             _statusLabel.Text = nextStatus;
@@ -544,14 +556,16 @@ internal sealed class AlertSpotCheckForm : Form
         DateTime changed = File.GetLastWriteTimeUtc(_configFile);
         string signature = changed.Ticks + "/" + File.GetLastWriteTimeUtc(settingsPath).Ticks;
         if (_configurationSignature == signature) return;
-        int interval = 30;
+        double interval = 1;
+        bool autoOpen = false;
         string provider = "";
         try
         {
             var serializer = new JavaScriptSerializer();
             var config = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(_configFile, Encoding.UTF8));
             object value;
-            if (config.TryGetValue("mailConfirmationListCheckIntervalSeconds", out value)) interval = Convert.ToInt32(value);
+            if (config.TryGetValue("mailConfirmationAutoOpenEnabled", out value)) autoOpen = Convert.ToBoolean(value);
+            if (config.TryGetValue(autoOpen ? "mailConfirmationListCheckIntervalSeconds" : "intervalSeconds", out value)) interval = Convert.ToDouble(value);
             if (config.TryGetValue("notificationSettingsFile", out value))
             {
                 string configuredPath = Convert.ToString(value);
@@ -566,9 +580,9 @@ internal sealed class AlertSpotCheckForm : Form
         catch { provider = ""; }
         _notificationSettingsPath = settingsPath;
         _configurationSignature = changed.Ticks + "/" + File.GetLastWriteTimeUtc(settingsPath).Ticks;
-        _channelLabel.Text = provider == "wechat" ? "微信推送" : provider == "qqmail" ? "邮箱提醒" : provider == "dingtalk" ? "钉钉提醒" : "查看通知设置";
+        _channelLabel.Text = provider == "wechat" ? "微信推送" : provider == "qqmail" ? "邮箱提醒" : provider == "dingtalk" ? "钉钉提醒" : "尚未配置";
         _intervalLabel.Text = "约 " + interval + " 秒";
-        _ruleLabel.Text = "告警 6 位 / 电话 4 位";
+        _ruleLabel.Text = autoOpen ? "抽查邮件确认码" : "屏幕关键词";
     }
 
     private string ReadLogTail(int maxLines)
@@ -641,7 +655,7 @@ internal sealed class AlertSpotCheckForm : Form
         }
         if (entries.Count == 0)
         {
-            entries.Add(new LogEntry { Time = "还没有运行记录", Message = "点击“一键启动”后，这里会显示最新状态。", Count = 1 });
+            entries.Add(new LogEntry { Time = "还没有运行记录", Message = "点击“启动监控”后，这里会显示最新状态。", Count = 1 });
         }
         for (int i = entries.Count - 1; i >= Math.Max(0, entries.Count - 5); i--)
         {
@@ -741,7 +755,7 @@ internal sealed class AlertSpotCheckForm : Form
 
     private int FindMonitorPid()
     {
-        string needle = _monitorScript.Replace("'", "''");
+
         try
         {
             using (var searcher = new ManagementObjectSearcher("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='powershell.exe' OR Name='pwsh.exe'"))
@@ -751,8 +765,8 @@ internal sealed class AlertSpotCheckForm : Form
                 {
                     string commandLine = Convert.ToString(process["CommandLine"]);
                     if (string.IsNullOrWhiteSpace(commandLine)) continue;
-                    if (Regex.IsMatch(commandLine, @"(?:^|\s)-File\s+", RegexOptions.IgnoreCase) && commandLine.IndexOf("Monitor-WindowKeywords.ps1", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                        commandLine.IndexOf(Path.GetFileName(_projectRoot), StringComparison.OrdinalIgnoreCase) >= 0)
+                    var file = Regex.Match(commandLine, @"(?:^|\s)-File\s+(?:""(?<path>[^""]+)""|(?<path>[^\s]+))", RegexOptions.IgnoreCase);
+                    if (file.Success && string.Equals(file.Groups["path"].Value, _monitorScript, StringComparison.OrdinalIgnoreCase))
                     {
                         return Convert.ToInt32(process["ProcessId"]);
                     }

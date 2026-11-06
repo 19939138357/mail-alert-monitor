@@ -25,10 +25,11 @@ jobs:
           & .\legacy\windows\tests\Test-VerificationCode.ps1
           & .\legacy\windows\tests\Test-MailConfirmation.ps1
       - name: Build the portable application
-        if: ${{ hashFiles('legacy/windows/package.py') != '' }}
         run: python legacy/windows/package.py
+      - name: Open the packaged app on a clean profile
+        shell: powershell
+        run: '& .\legacy\windows\tests\Test-PortableRelease.ps1'
       - name: Keep tested Windows package
-        if: ${{ hashFiles('legacy/windows/package.py') != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: windows-desktop
