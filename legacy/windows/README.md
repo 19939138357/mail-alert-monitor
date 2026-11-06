@@ -1,5 +1,8 @@
 # Windows 邮件监控
 
+![Windows 便携版首次启动的监控总览](../../docs/images/windows-overview.png)
+
+
 此目录包含 Windows PowerShell 5.1 OCR 监控、通知传输、WinForms 控制台和测试源码。它与当前 macOS 主线独立：Windows 提供屏幕关键词、抽查邮件确认码、Foxmail 未读邮件正文三种模式。正文模式识别 Windows 电脑上可见的 Foxmail 画面。
 
 公开副本中的门户、发件人和窗口地址均为合成示例。`portal.example.com:9978`、`report@example.com`、`192.0.2.x` 不会连接到原使用环境。
