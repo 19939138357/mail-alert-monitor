@@ -1,5 +1,6 @@
 name: Windows desktop
 on:
+  workflow_call:
   push:
     paths:
       - 'legacy/windows/**'
@@ -24,6 +25,8 @@ jobs:
         run: |
           & .\legacy\windows\tests\Test-VerificationCode.ps1
           & .\legacy\windows\tests\Test-MailConfirmation.ps1
+          & .\legacy\windows\tests\Test-FoxmailQueue.ps1
+          & .\legacy\windows\tests\Test-FoxmailScreen.ps1
       - name: Build the portable application
         run: python legacy/windows/package.py
       - name: Open the packaged app on a clean profile
@@ -34,4 +37,11 @@ jobs:
         with:
           name: windows-desktop
           path: dist/MailAlertMonitor-Windows.zip
+          if-no-files-found: error
+      - name: Keep the clean-profile window preview
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-ui
+          path: .build/windows-smoke/overview.png
+          include-hidden-files: true
           if-no-files-found: error

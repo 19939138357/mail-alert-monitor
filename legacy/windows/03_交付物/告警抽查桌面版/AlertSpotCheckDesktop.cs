@@ -166,8 +166,21 @@ internal sealed class AlertSpotCheckForm : Form
         configButton.Dock = DockStyle.Top;
         configButton.Height = 40;
         configButton.Click += delegate { OpenMonitorSettings(); };
-        sidebar.Controls.Add(configButton, 0, 5);
+        var configSection = Grid(1, 3, DesktopTheme.Canvas);
+        configSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        configSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        configSection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        configSection.Controls.Add(configButton, 0, 0);
         _loginStatusLabel = NewLabel("", 9, FontStyle.Regular, DesktopTheme.Muted);
+        _loginStatusLabel.TextAlign = ContentAlignment.TopLeft;
+        var review = NavigationButton("待核对邮件", DesktopTheme.LogSvg, false);
+        review.Click += delegate {
+            try { UnreadReview.Show(this,_projectRoot); }
+            catch (Exception) { ShowError("暂时无法读取队列，请用原 Windows 用户稍后重试。"); }
+        };
+        configSection.Controls.Add(review, 0, 1);
+        configSection.Controls.Add(_loginStatusLabel, 0, 2);
+        sidebar.Controls.Add(configSection, 0, 5);
         var health = Grid(1, 2, DesktopTheme.Canvas);
         health.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
         health.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
@@ -201,6 +214,9 @@ internal sealed class AlertSpotCheckForm : Form
         menu.Items.Add("编辑监控设置", null, delegate { OpenMonitorSettings(); });
         menu.Items.Add("配置文件所在位置", null, delegate { OpenPath(_projectRoot); });
 
+        if (File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "browser", "edge-login.js")) &&
+            File.Exists(Path.Combine(_projectRoot, @"04_资料\私密配置\system-login.dat")))
+            menu.Items.Add("打开已配置的门户", null, delegate { OpenSystemLogin(); });
         more.Click += delegate { menu.Show(more, new Point(0, more.Height)); };
         header.Controls.Add(more, 1, 0);
         main.Controls.Add(header, 0, 0);
@@ -509,6 +525,13 @@ internal sealed class AlertSpotCheckForm : Form
                 nextStatusColor = DesktopTheme.Accent;
                 nextHint = "正在核对新告警与验证码，确认一致后推送。";
             }
+            else if (state == "FoxmailQueue")
+            {
+                bool needsReview = Regex.IsMatch(lastLine, @"待核对 [1-9][0-9]* 封|部分未读标记|窗口未就绪");
+                nextStatus = needsReview ? "有邮件待核对" : "未读邮件监控中";
+                nextStatusColor = needsReview ? DesktopTheme.Warning : DesktopTheme.Success;
+                nextHint = Regex.Replace(lastLine, @"^.*?未读邮件正文 · |\s*\[FoxmailQueue\]$", "");
+            }
             else if (state == "Sent")
             {
                 nextStatus = "推送服务已受理";
@@ -558,12 +581,14 @@ internal sealed class AlertSpotCheckForm : Form
         if (_configurationSignature == signature) return;
         double interval = 1;
         bool autoOpen = false;
+        bool unread = false;
         string provider = "";
         try
         {
             var serializer = new JavaScriptSerializer();
             var config = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(_configFile, Encoding.UTF8));
             object value;
+            if (config.TryGetValue("foxmailUnreadEnabled", out value)) unread = Convert.ToBoolean(value);
             if (config.TryGetValue("mailConfirmationAutoOpenEnabled", out value)) autoOpen = Convert.ToBoolean(value);
             if (config.TryGetValue(autoOpen ? "mailConfirmationListCheckIntervalSeconds" : "intervalSeconds", out value)) interval = Convert.ToDouble(value);
             if (config.TryGetValue("notificationSettingsFile", out value))
@@ -582,7 +607,7 @@ internal sealed class AlertSpotCheckForm : Form
         _configurationSignature = changed.Ticks + "/" + File.GetLastWriteTimeUtc(settingsPath).Ticks;
         _channelLabel.Text = provider == "wechat" ? "微信推送" : provider == "qqmail" ? "邮箱提醒" : provider == "dingtalk" ? "钉钉提醒" : "尚未配置";
         _intervalLabel.Text = "约 " + interval + " 秒";
-        _ruleLabel.Text = autoOpen ? "抽查邮件确认码" : "屏幕关键词";
+        _ruleLabel.Text = unread ? "Foxmail 未读邮件正文" : autoOpen ? "抽查邮件确认码" : "屏幕关键词";
     }
 
     private string ReadLogTail(int maxLines)
@@ -745,6 +770,11 @@ internal sealed class AlertSpotCheckForm : Form
         if (_preview) return;
         try
         {
+            if (path == _logFile && !File.Exists(path))
+            {
+                MessageBox.Show(this, "启动监控后，首次扫描会生成运行日志。", "运行日志");
+                return;
+            }
             Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
         }
         catch (Exception ex)

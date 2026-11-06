@@ -42,6 +42,28 @@ public static class Win32WindowTools
         public int Bottom;
     }
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int bytes);
+
+    public static bool IsCaptureVisible(IntPtr target, int left, int top, int width, int height)
+    {
+        if (target == IntPtr.Zero || target != GetForegroundWindow() || width <= 0 || height <= 0) return false;
+        RECT bounds;
+        if (!GetWindowRect(target, out bounds) || left < bounds.Left || top < bounds.Top ||
+            left + width > bounds.Right || top + height > bounds.Bottom) return false;
+        bool found = false;
+        EnumWindows(delegate(IntPtr window, IntPtr unused) {
+            if (window == target) { found = true; return false; }
+            if (!IsWindowVisible(window) || IsIconic(window)) return true;
+            int cloaked;
+            if (DwmGetWindowAttribute(window, 14, out cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
+            RECT other;
+            if (!GetWindowRect(window, out other)) return false;
+            return other.Left >= left + width || other.Right <= left || other.Top >= top + height || other.Bottom <= top;
+        }, IntPtr.Zero);
+        return found && target == GetForegroundWindow();
+    }
+
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
@@ -1317,6 +1339,8 @@ function Invoke-PhoneCall {
 . (Join-Path $PSScriptRoot 'VerificationPush.ps1')
 . (Join-Path $PSScriptRoot 'VerificationMonitor.ps1')
 . (Join-Path $PSScriptRoot 'MailConfirmation.ps1')
+. (Join-Path $PSScriptRoot 'FoxmailQueue.ps1')
+. (Join-Path $PSScriptRoot 'FoxmailScreen.ps1')
 
 if ($LibraryOnly) { return }
 if (-not [System.IO.Path]::IsPathRooted($ConfigPath)) {
@@ -1325,6 +1349,7 @@ if (-not [System.IO.Path]::IsPathRooted($ConfigPath)) {
 $config = Read-Config $ConfigPath
 
 if ($VerificationOnly) {
+    if (Get-ConfigBool $config 'foxmailUnreadEnabled' $false) { exit 0 }
     if (Get-ConfigBool $config 'mailConfirmationAutoOpenEnabled' $false) {
         Write-MonitorLog $config 'Automatic mail confirmation mode is enabled; use the main launcher to keep mail identity and type-specific code checks together.'
         exit 0
@@ -1365,6 +1390,12 @@ if (-not $monitorLocked) {
     exit 0
 }
 
+if (Get-ConfigBool $config 'foxmailUnreadEnabled' $false) {
+    try { Start-FoxmailUnreadMonitor -Config $config -Once:$Once -NoSend:$NoCall }
+    finally { $monitorMutex.ReleaseMutex(); $monitorMutex.Dispose(); $instanceFileLock.Dispose() }
+    exit 0
+}
+
 if (Get-ConfigBool $config 'mailConfirmationAutoOpenEnabled' $false) {
     try { Start-MailConfirmationMonitor -Config $config -Once:$Once -NoSend:$NoCall }
     catch { Write-MonitorLog $config ('Auto mail confirmation failed (' + $_.Exception.GetType().Name + '); stopped without saving message content.'); throw }
@@ -1396,7 +1427,7 @@ Write-MonitorLog $config "Monitor started. Keywords: $(@($config.keywords) -join
 try {
 while ($true) {
     try {
-        $rectangle = Get-TargetRectangle $config
+        $rectangle = Get-TargetRectangle $config -ForegroundOnly
         if ($null -eq $rectangle) {
             $noTargetLogIntervalSeconds = Get-ConfigInt $config "noTargetLogIntervalSeconds" 60
             if (((Get-Date) - $lastNoTargetLogAt).TotalSeconds -ge $noTargetLogIntervalSeconds) {
@@ -1434,14 +1465,30 @@ while ($true) {
 
         $captureRectangle = Get-CaptureRectangle $config $rectangle
         $ocrScale = if ($config.ocrScale) { [double]$config.ocrScale } else { 1.0 }
-        Save-Screenshot $captureRectangle $tempImage $ocrScale
-        if ($config.lastScreenshotFile -and -not (Get-ConfigBool $config 'verificationCodeEnabled' $false)) {
-            Copy-Item -LiteralPath $tempImage -Destination (Join-Path -Path $PSScriptRoot -ChildPath $config.lastScreenshotFile) -Force
-        }
-
-        try { $text = Read-ConfiguredOcrText $config $engine $tempImage }
-        finally { Remove-Item -LiteralPath $tempImage -Force -ErrorAction SilentlyContinue }
-        if ($config.ocrTextFile) {
+        $desktopCapture = $rectangle.Handle -eq [IntPtr]::Zero -and $config.scanFullDesktopWhenNoWindow
+        try {
+            if (-not $desktopCapture -and -not [Win32WindowTools]::IsCaptureVisible($rectangle.Handle,$captureRectangle.Left,$captureRectangle.Top,$captureRectangle.Width,$captureRectangle.Height)) {
+                if ($Once) { break }; Wait-MonitorInterval $config; continue
+            }
+            $diagnostics = Get-ConfigBool $config 'saveOcrDiagnostics' $false
+            $memoryOnly = -not $diagnostics -and (Get-ConfigString $config 'ocrProvider' 'windows') -ieq 'windows'
+            if ($memoryOnly) {
+                $text = Read-VerificationRectangleText -Engine $engine -Rectangle $captureRectangle -ScaleLimit ([Math]::Max(1.0,$ocrScale)) -WordSeparator ''
+            } else { Save-Screenshot $captureRectangle $tempImage $ocrScale }
+            if (-not $desktopCapture) {
+                $current = Get-TargetRectangle $config -ForegroundOnly
+                if ($null -eq $current -or $current.Handle -ne $rectangle.Handle -or $current.Title -cne $rectangle.Title -or
+                    $current.Left -ne $rectangle.Left -or $current.Top -ne $rectangle.Top -or $current.Width -ne $rectangle.Width -or $current.Height -ne $rectangle.Height -or
+                    -not [Win32WindowTools]::IsCaptureVisible($rectangle.Handle,$captureRectangle.Left,$captureRectangle.Top,$captureRectangle.Width,$captureRectangle.Height)) {
+                    if ($Once) { break }; Wait-MonitorInterval $config; continue
+                }
+            }
+            if ($diagnostics -and $config.lastScreenshotFile -and -not (Get-ConfigBool $config 'verificationCodeEnabled' $false)) {
+                Copy-Item -LiteralPath $tempImage -Destination (Join-Path -Path $PSScriptRoot -ChildPath $config.lastScreenshotFile) -Force
+            }
+            if (-not $memoryOnly) { $text = Read-ConfiguredOcrText $config $engine $tempImage }
+        } finally { Remove-Item -LiteralPath $tempImage -Force -ErrorAction SilentlyContinue }
+        if ($diagnostics -and $config.ocrTextFile) {
             Set-Content -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath $config.ocrTextFile) -Value (Protect-VerificationText $text) -Encoding UTF8
         }
 

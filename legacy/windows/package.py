@@ -13,7 +13,8 @@ ROOT = WINDOWS.parents[1]
 DESKTOP = WINDOWS / '03_交付物/告警抽查桌面版'
 WORK = ROOT / '.build/windows-package'
 SCRIPTS = (
-    'Monitor-WindowKeywords.ps1', 'MailConfirmation.ps1', 'VerificationCode.ps1',
+    'Monitor-WindowKeywords.ps1', 'FoxmailQueue.ps1', 'FoxmailScreen.ps1', 'FoxmailScreenNative.cs',
+    'MailConfirmation.ps1', 'VerificationCode.ps1',
     'VerificationMonitor.ps1', 'VerificationPush.ps1', 'NotificationTransport.ps1',
     'Configure-PhoneNotification.ps1', 'Test-VerificationPhone.ps1',
     'paddle_ocr_runner.py', 'monitor_config.example.json', '03_交付物/微信通知使用说明.md',
@@ -65,7 +66,7 @@ def compile_app(args, dll):
                       '/win32icon:' + str(DESKTOP / 'assets/screen-alert.ico')]
     cmd += ['/reference:' + ref for ref in refs + [str(dll)]]
     cmd += [str(DESKTOP / (name + '.cs')) for name in (
-        'AlertSpotCheckDesktop', 'DesktopTheme', 'MonitorSettings', 'EdgeSystemLogin')]
+        'AlertSpotCheckDesktop', 'DesktopTheme', 'MonitorSettings', 'MailRegions', 'UnreadReview', 'EdgeSystemLogin')]
     subprocess.run(cmd, check=True)
     return target
 

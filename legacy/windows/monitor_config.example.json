@@ -50,6 +50,8 @@
   "ocrPrompt": "请识别图中文字。",
   "ocrLanguage": "zh-Hans-CN",
   "ocrScale": 1.0,
+  "saveOcrDiagnostics": false,
+  "foxmailUnreadEnabled": false,
   "ocrTextFile": "",
   "lastScreenshotFile": "",
   "logFile": "monitor.log",

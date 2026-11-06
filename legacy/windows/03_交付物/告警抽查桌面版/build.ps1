@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath $compiler)) {
 }
 
 & $compiler /nologo /target:winexe /platform:anycpu /optimize+ /codepage:65001 /utf8output `
-    "/out:$output" "/win32icon:$icon" "/reference:$library" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Management.dll /reference:System.Web.Extensions.dll /reference:System.Security.dll $source $theme $login (Join-Path $PSScriptRoot 'MonitorSettings.cs')
+    "/out:$output" "/win32icon:$icon" "/reference:$library" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Management.dll /reference:System.Web.Extensions.dll /reference:System.Security.dll $source $theme $login (Join-Path $PSScriptRoot 'MonitorSettings.cs') (Join-Path $PSScriptRoot 'MailRegions.cs') (Join-Path $PSScriptRoot 'UnreadReview.cs')
 if ($LASTEXITCODE -ne 0) {
     throw "Compilation failed with exit code $LASTEXITCODE."
 }

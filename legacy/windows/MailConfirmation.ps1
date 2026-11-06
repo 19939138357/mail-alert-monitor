@@ -16,12 +16,11 @@ function Get-MailConfirmationTitles {
 }
 
 function Test-MailConfirmationSender {
-    param([AllowNull()][string]$Text, [switch]$ListOcr)
+    param([AllowNull()][string]$Text, [switch]$ListOcr, [string]$ExpectedSender = 'report@example.com')
     $normal = [regex]::Replace((ConvertTo-VerificationNormalText $Text), '[^\S\r\n]', '')
-    # Synthetic sender fixture models one narrow OCR punctuation artifact.
-    # Correct only this exact OCR artifact; do not accept another mailbox or domain.
-    $normal = $normal -replace '(?i)report@example\.com/cn', 'report@example.com'
-    return $normal -match '(?i)(?<![a-z0-9_.+\-])report@example\.com(?![a-z0-9_.\-])'
+    if ([string]::IsNullOrWhiteSpace($ExpectedSender)) { return $false }
+    $address = [regex]::Escape($ExpectedSender.Trim())
+    return $normal -match ('(?i)(?<![a-z0-9_.+\-])' + $address + '(?![a-z0-9_.\-])')
 }
 
 function Get-MailConfirmationDefinition {
@@ -46,7 +45,7 @@ function Set-MailConfirmationBaseline {
 }
 
 function Get-MailConfirmationRows {
-    param($Layout, [datetime]$Now = (Get-Date), [switch]$IncludePast)
+    param($Layout, [datetime]$Now = (Get-Date), [switch]$IncludePast, [string]$ExpectedSender = 'report@example.com')
     if ($null -eq $Layout) { return }
     $rows = @(foreach ($line in $Layout.Lines) {
         $titles = @(Get-MailConfirmationTitles $line.Text)
@@ -56,7 +55,7 @@ function Get-MailConfirmationRows {
         # Foxmail list: sender immediately above its subject. Never use the reader's sender.
         $sender = @($Layout.Lines | Where-Object {
             $_.Top -le $line.Top -and ($line.Top - $_.Top) -le [Math]::Max(32, $line.Height * 3) -and
-            [Math]::Abs($_.Left - $line.Left) -le [Math]::Max(25, $line.Height * 2) -and (Test-MailConfirmationSender $_.Text -ListOcr)
+            [Math]::Abs($_.Left - $line.Left) -le [Math]::Max(25, $line.Height * 2) -and (Test-MailConfirmationSender $_.Text -ListOcr -ExpectedSender $ExpectedSender)
         })
         if ($sender.Count -eq 0 -or $line.Width -lt 40 -or $line.Height -lt 5) { continue }
         $x = $line.Left + [Math]::Min($line.Width * 0.5, 100)
@@ -93,8 +92,8 @@ function Select-MailConfirmationRow {
 }
 
 function Update-MailConfirmationEmptyBaselines {
-    param($State, $Layout, [object[]]$Rows, [datetime]$Now)
-    $loadedList = $null -ne $Layout -and @($Layout.Lines | Where-Object { Test-MailConfirmationSender $_.Text -ListOcr }).Count -gt 0
+    param($State, $Layout, [object[]]$Rows, [datetime]$Now, [string]$ExpectedSender = 'report@example.com')
+    $loadedList = $null -ne $Layout -and @($Layout.Lines | Where-Object { Test-MailConfirmationSender $_.Text -ListOcr -ExpectedSender $ExpectedSender }).Count -gt 0
     $text = if ($null -ne $Layout) { [regex]::Replace(($Layout.Lines.Text -join ''), '\s', '') } else { '' }
     $changed = $false
     foreach ($kind in @('alert', 'phone')) {
@@ -118,8 +117,8 @@ function Update-MailConfirmationEmptyBaselines {
 }
 
 function Get-MailConfirmationCode {
-    param([AllowNull()][string]$Text, $Expected)
-    if ($null -eq $Expected -or -not (Test-MailConfirmationSender $Text)) { return }
+    param([AllowNull()][string]$Text, $Expected, [string]$ExpectedSender = 'report@example.com')
+    if ($null -eq $Expected -or -not (Test-MailConfirmationSender $Text -ExpectedSender $ExpectedSender)) { return }
     $titles = @(Get-MailConfirmationTitles $Text | Select-Object -ExpandProperty Id -Unique)
     if ($titles.Count -ne 1 -or $titles[0] -ne $Expected.Id) { return }
     $definition = Get-MailConfirmationDefinition $Expected
@@ -139,9 +138,9 @@ function Get-MailConfirmationPaths {
 }
 
 function Get-MailConfirmationDateStatus {
-    param([AllowNull()][string]$Text, $Expected, [datetime]$Now)
+    param([AllowNull()][string]$Text, $Expected, [datetime]$Now, [string]$ExpectedSender = 'report@example.com')
     $titles = @(Get-MailConfirmationTitles $Text | Select-Object -ExpandProperty Id -Unique)
-    if ($titles.Count -ne 1 -or $titles[0] -ne $Expected.Id -or -not (Test-MailConfirmationSender $Text)) { return 'Missing' }
+    if ($titles.Count -ne 1 -or $titles[0] -ne $Expected.Id -or -not (Test-MailConfirmationSender $Text -ExpectedSender $ExpectedSender)) { return 'Missing' }
     $normal = [regex]::Replace((ConvertTo-VerificationNormalText $Text), '\s', '')
     $definition = Get-MailConfirmationDefinition $Expected
     $label = [regex]::Match($normal, $definition.LabelPattern)
@@ -244,6 +243,7 @@ function Invoke-MailConfirmationFrame {
     param($State, $Config, $ListLayout, [AllowNull()][string]$BodyText, $Rectangle, $ListRoi,
         [bool]$CanOperate = $true, [datetime]$Now = (Get-Date), [switch]$NoSend)
     if ($NoSend) { return 'DryRun' }
+    $expectedSender = [string](Get-VerificationSetting $Config 'mailConfirmationSender' 'report@example.com')
     if ($null -ne $State.LastFrameAt -and (($Now - $State.LastFrameAt).TotalSeconds -lt 0 -or ($Now - $State.LastFrameAt).TotalSeconds -gt 8)) {
         $State.Candidate = $null; $State.Frames = 0; $State.EmptySince = $null; $State.PhoneEmptySince = $null
         if ($null -ne $State.Pending) { $State.Pending.Code = ''; $State.Pending.CodeFrames = 0 }
@@ -262,12 +262,12 @@ function Invoke-MailConfirmationFrame {
             return 'Expired'
         }
         if ($elapsed -lt 2) { return 'WaitingForPreview' }
-        $dateStatus = Get-MailConfirmationDateStatus -Text $BodyText -Expected $pending.Event -Now $Now
+        $dateStatus = Get-MailConfirmationDateStatus -Text $BodyText -Expected $pending.Event -Now $Now -ExpectedSender $expectedSender
         if ($dateStatus -eq 'Expired') {
             Set-MailConfirmationRecord $State $pending.Event 'Expired' $Now; $State.Pending = $null
             return 'Expired'
         }
-        $code = if ($dateStatus -eq 'Current') { Get-MailConfirmationCode -Text $BodyText -Expected $pending.Event } else { $null }
+        $code = if ($dateStatus -eq 'Current') { Get-MailConfirmationCode -Text $BodyText -Expected $pending.Event -ExpectedSender $expectedSender } else { $null }
         if (-not $code) { $pending.Code = ''; $pending.CodeFrames = 0 }
         elseif ($code -ceq $pending.Code) { $pending.CodeFrames++ }
         else { $pending.Code = $code; $pending.CodeFrames = 1 }
@@ -277,8 +277,8 @@ function Invoke-MailConfirmationFrame {
         if ($elapsed -ge 40 -and $pending.Attempts -eq 0) { return Invoke-MailConfirmationDelivery $State $Config '' $Now }
         return 'ReadingPreview'
     }
-    $rows = @(Get-MailConfirmationRows $ListLayout $Now -IncludePast)
-    $baselineChanged = Update-MailConfirmationEmptyBaselines $State $ListLayout $rows $Now
+    $rows = @(Get-MailConfirmationRows $ListLayout $Now -IncludePast -ExpectedSender $expectedSender)
+    $baselineChanged = Update-MailConfirmationEmptyBaselines $State $ListLayout $rows $Now -ExpectedSender $expectedSender
     $row = Select-MailConfirmationRow $rows $State
     if ($null -eq $row) {
         $State.Candidate = $null; $State.Frames = 0

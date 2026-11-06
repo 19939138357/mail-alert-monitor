@@ -324,7 +324,7 @@ function Get-NotificationExceptionOutcome {
 
 function Send-MonitorNotification {
     [CmdletBinding()]
-    param($Config, [string]$Title, [string]$Message, [Parameter(Mandatory = $true)][ref]$Outcome, [switch]$IsAlarm)
+    param($Config, [string]$Title, [string]$Message, [Parameter(Mandatory = $true)][ref]$Outcome, [switch]$IsAlarm, [switch]$PreserveSubject)
 
     $Outcome.Value = 'PermanentFailure'
     $script:LastNotificationDetail = ''
@@ -338,7 +338,8 @@ function Send-MonitorNotification {
         if ($nightAlarm) {
             # Only explicit alarm callers can opt into the Android ring-helper protocol.
             # The event ID distinguishes new messages when a source app reuses its notification ID.
-            $Title = '【夜间告警】[事件:' + [guid]::NewGuid().ToString('N') + '] ' + $Title
+            $marker = '【夜间告警】[事件:' + [guid]::NewGuid().ToString('N') + ']'
+            if ($PreserveSubject) { $Message = $Message + "`n" + $marker } else { $Title = $marker + ' ' + $Title }
         }
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
         if ($provider -ieq 'qqmail') {

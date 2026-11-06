@@ -4,6 +4,9 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'Monitor-WindowKeywords.ps1') -LibraryOnly
 $script:checks = 0
 function Assert($Condition, [string]$Name) { if (-not $Condition) { throw ('FAIL: ' + $Name) }; $script:checks++ }
+Assert (Test-MailConfirmationSender 'alerts+noc@example.org' -ExpectedSender 'alerts+noc@example.org') 'configured sender supports literal plus'
+Assert (-not (Test-MailConfirmationSender 'alerts+noc@example.org.invalid' -ExpectedSender 'alerts+noc@example.org')) 'configured sender rejects suffix'
+Assert (-not (Test-MailConfirmationSender 'report@example.com' -ExpectedSender 'alerts+noc@example.org')) 'configured sender excludes fixture address'
 $now = [datetime]'2026-09-08T10:00:00'
 $script:clicks = 0; $script:sends = @(); $script:outcome = 'Success'; $script:allowClick = $true
 function Invoke-MailConfirmationClick { param($Rectangle,$Roi,$Row); if ($script:allowClick) { $script:clicks++; return $true }; return $false }

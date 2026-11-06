@@ -1,6 +1,6 @@
 ﻿# Fast verification-code OCR runs independently from the heavier mail alert OCR.
 function Read-VerificationRectangleText {
-    param($Engine, $Rectangle, [System.Drawing.Bitmap]$InputBitmap, [switch]$AsLayout)
+    param($Engine, $Rectangle, [System.Drawing.Bitmap]$InputBitmap, [switch]$AsLayout, [double]$ScaleLimit = 2.0, [string]$WordSeparator = ' ')
     [void][Windows.Storage.Streams.InMemoryRandomAccessStream, Windows.Storage.Streams, ContentType = WindowsRuntime]
     [void][Windows.Storage.Streams.DataWriter, Windows.Storage.Streams, ContentType = WindowsRuntime]
     $bitmap = if ($null -ne $InputBitmap) { [System.Drawing.Bitmap]$InputBitmap.Clone() } else { [System.Drawing.Bitmap]::new($Rectangle.Width, $Rectangle.Height) }
@@ -14,7 +14,7 @@ function Read-VerificationRectangleText {
     try {
         if ($null -eq $InputBitmap) { $graphics.CopyFromScreen($Rectangle.Left, $Rectangle.Top, 0, 0, $bitmap.Size) }
         $limit = [Windows.Media.Ocr.OcrEngine]::MaxImageDimension
-        $scale = [Math]::Min(2.0, $limit / [double][Math]::Max($bitmap.Width, $bitmap.Height))
+        $scale = [Math]::Min($ScaleLimit, $limit / [double][Math]::Max($bitmap.Width, $bitmap.Height))
         $scaled = [System.Drawing.Bitmap]::new([int]($bitmap.Width * $scale), [int]($bitmap.Height * $scale))
         $scaledGraphics = [System.Drawing.Graphics]::FromImage($scaled)
         $scaledGraphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
@@ -41,7 +41,7 @@ function Read-VerificationRectangleText {
             return [pscustomobject]@{ Text = ($lines | ForEach-Object Text) -join "`n"; Lines = $lines; Width = $bitmap.Width; Height = $bitmap.Height }
         }
         # Preserve word boundaries: joining every token would mix codes with English labels.
-        return (($result.Lines | ForEach-Object { ($_.Words | ForEach-Object { $_.Text }) -join ' ' }) -join "`n")
+        return (($result.Lines | ForEach-Object { ($_.Words | ForEach-Object { $_.Text }) -join $WordSeparator }) -join "`n")
     }
     finally {
         if ($null -ne $software -and $software -is [IDisposable]) { $software.Dispose() }
