@@ -11,7 +11,15 @@ fi
 manager="$sdk/cmdline-tools/latest/bin"
 image='system-images;android-35;google_apis;x86_64'
 "$manager/sdkmanager" 'platform-tools' 'emulator' "$image" >/dev/null
+export ANDROID_USER_HOME="$PWD/$out/android-user"
+export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+mkdir -p "$ANDROID_AVD_HOME"
 echo no | "$manager/avdmanager" create avd --force -n handset-release --path "$PWD/$out/handset.avd" --device pixel_2 -k "$image"
+# avdmanager and emulator may resolve the runner's SDK user home differently.
+# Register the absolute AVD directory in the directory both commands now share.
+test -s "$out/handset.avd/config.ini"
+printf 'avd.ini.encoding=UTF-8\npath=%s\ntarget=android-35\n' "$PWD/$out/handset.avd" > "$ANDROID_AVD_HOME/handset-release.ini"
+"$sdk/emulator/emulator" -list-avds | grep -Fx handset-release
 # Keep the disposable user partition within the GitHub runner disk budget.
 printf "\ndisk.dataPartition.size=1024M\nhw.ramSize=2048\n" >> "$out/handset.avd/config.ini"
 df -h .
