@@ -15,14 +15,14 @@ $ticket=$t[0]
 $header=@('Quarterly report','Demo Service','发送给 值班','发件人：','Demo Service <test@example.org>','收件人：','User','时间：2026年05月10日 (周日) 12:45','大小：2 KB','Hello, example!')
 $receipt=Get-FoxmailHeader $header $ticket
 Assert-Screen ($receipt -and $receipt.Start -eq 9 -and $receipt.Subject -eq 'Quarterly report') 'complete verified header'
-$wrong=@($header);$wrong[4]='Another <other@example.org>'
+$wrong=[string[]]$header.Clone();$wrong[4]='Another <other@example.org>'
 Assert-Screen (!(Get-FoxmailHeader $wrong $ticket)) 'wrong sender'
-$wrong=@($header);$wrong[7]='时间：2026年05月10日 (周日) 12:43'
+$wrong=[string[]]$header.Clone();$wrong[7]='时间：2026年05月10日 (周日) 12:43'
 Assert-Screen (!(Get-FoxmailHeader $wrong $ticket)) 'wrong time'
-$wrong=@($header);$wrong[0]='Quarterly budget'
+$wrong=[string[]]$header.Clone();$wrong[0]='Quarterly budget'
 Assert-Screen (!(Get-FoxmailHeader $wrong $ticket)) 'wrong subject'
 Assert-Screen (!(Get-FoxmailHeader $header[0..7] $ticket)) 'wait for complete metadata'
-$wrong=@($header);$wrong[7]='时间：2026-05-10 12:44:58'
+$wrong=[string[]]$header.Clone();$wrong[7]='时间：2026-05-10 12:44:58'
 Assert-Screen (!(Get-FoxmailHeader $wrong $ticket)) 'exact header seconds cannot leak into next minute'
 $rel=@(Get-FoxmailTimeWindow '3分钟前' $seen $seen)
 Assert-Screen ($rel.Count -eq 2 -and $rel[0] -le $seen.AddMinutes(-3) -and $rel[1] -ge $seen.AddMinutes(-3)) 'relative time interval'
@@ -80,20 +80,30 @@ function Run-ScreenFixture($pages,$positive,$resume) {
     $script:pages=$pages;$script:positiveEnd=$positive;$script:clicked=$false;$script:resumed=$resume;$script:pageNo=0
     return Get-FoxmailOpenContent -Config @{} -Engine 1 -Ticket $ticket -ResumeOnly:$resume
 }
-$single=[pscustomobject]@{Text=$header}
+$single=[pscustomobject]@{Text=[string[]]$header.Clone()}
 $r=Run-ScreenFixture @($single) $true $false
 Assert-Screen ($r.Complete -and $r.Body -eq 'Hello, example!' -and $r.Sender -eq 'Demo Service' -and $script:clicked) 'first-time unread click and verified short body'
 $r=Run-ScreenFixture @($single) $false $false
 Assert-Screen (!$r.Complete) 'two unchanged wheel results without independent EOF cannot send'
 $r=Run-ScreenFixture @($single) $true $true
 Assert-Screen ($r.Complete -and !$script:clicked) 'resume same verified already-open message without reopening it'
-$wrong=@($header);$wrong[0]='Other message'
+$wrong=[string[]]$header.Clone();$wrong[0]='Other message'
 $r=Run-ScreenFixture @([pscustomobject]@{Text=$wrong}) $true $true
 Assert-Screen (!$r.Complete -and !$script:clicked) 'cannot resume an unrelated open message'
-$first=[pscustomobject]@{Text=$header+@('overlap one','overlap two')}
+Assert-Screen ($header[0] -eq 'Quarterly report' -and $header[4] -eq 'Demo Service <test@example.org>') 'negative fixture must leave the canonical header intact'
+$first=[pscustomobject]@{Text=[string[]]($header+@('overlap one','overlap two'))}
 $last=[pscustomobject]@{Text=@('overlap one','overlap two','last paragraph')}
 $r=Run-ScreenFixture @($first,$last) $true $false
-Assert-Screen ($r.Complete -and $r.Body -eq ("Hello, example!","overlap one","overlap two","last paragraph" -join "`n") -and $script:pageNo -eq 0) 'verified multipage document including final lines with header rechecked'
+if (!$r.Complete) {
+    throw ("synthetic multipage read incomplete; current page {0}; outcome {1}; diagnostic {2}" -f $script:pageNo,$r.Reason,$r.Trace)
+}
+$expectedLines=[string[]]@('Hello, example!','overlap one','overlap two','last paragraph')
+$actualLines=[string[]]@($r.Body -split '\r?\n')
+Assert-Screen ($actualLines.Count -eq $expectedLines.Count) ("multipage synthetic line count: " + ($actualLines -join '|'))
+for($lineIndex=0;$lineIndex -lt $expectedLines.Count;$lineIndex++) {
+    Assert-Screen ($actualLines[$lineIndex] -ceq $expectedLines[$lineIndex]) ("synthetic multipage text differed at line " + $lineIndex + ' ' + $actualLines[$lineIndex])
+}
+Assert-Screen ($script:pageNo -eq 0) 'returned to first page and rechecked identity after multipage read'
 $last=[pscustomobject]@{Text=@('no matching line','another ending')}
 $r=Run-ScreenFixture @($first,$last) $true $false
 Assert-Screen (!$r.Complete -and $script:pageNo -eq 0) 'interrupted merge withholds and restores same opened mail'

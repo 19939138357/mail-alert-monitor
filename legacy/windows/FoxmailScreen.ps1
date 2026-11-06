@@ -301,7 +301,7 @@ function Invoke-FoxmailWheel($Context,[int]$Delta,[long]$Stamp) {
 function Get-FoxmailOpenContent {
     param($Config,$Engine,$Ticket,[switch]$ResumeOnly)
     $needsRestore=$false
-    $pending=[pscustomobject]@{Complete=$false;Reason='等待核对同一封未读邮件。'}
+    $pending=[pscustomobject]@{Complete=$false;Trace='select';Reason='等待核对同一封未读邮件。'}
     try {
         Initialize-FoxmailScreen
         $ctx=Get-FoxmailContext $Config
@@ -321,12 +321,14 @@ function Get-FoxmailOpenContent {
             if (@((Read-FoxmailFrame $ctx $Engine List).Rows | Where-Object {Test-FoxmailMatch $Ticket $_}).Count) {return $pending}
         } elseif (!$ResumeOnly) {return $pending}
         # Recover only from the same verified header. Never scroll through another open mail to look for it.
+        $pending.Trace='initial header'
         $frame=Get-FoxmailStableBody $ctx $Engine $stamp
         $receipt=Get-FoxmailHeader $frame.Text $Ticket
         if (!$receipt -or $receipt.Start -ge $frame.Text.Count) {return $pending}
         $lines=[string[]]@($frame.Text)
         $previous=$frame.Text -join "`n";$endCount=0;$moved=$false
         for($n=0;$n -lt 75;$n++) {
+            $pending.Trace="page-$n"
             $stamp=Invoke-FoxmailWheel $ctx -120 $stamp
             $needsRestore=$true
             $page=Get-FoxmailStableBody $ctx $Engine $stamp
@@ -340,12 +342,14 @@ function Get-FoxmailOpenContent {
             $visibleReceipt=Get-FoxmailHeader $page.Text $Ticket
             if ($visibleReceipt -and $visibleReceipt.Identity -ne $receipt.Identity) {return $pending}
             $next=if ($visibleReceipt) {@($page.Text | Select-Object -Skip $visibleReceipt.Start)} else {@($page.Text)}
+            $pending.Trace="page-$n-merge"
             $merged=@(Join-FoxmailPage $lines $next)
             if (!$merged.Count -or ($merged -join "`n").Length -gt 19000) {return $pending}
             $lines=[string[]]$merged
         }
         if ($endCount -lt 2) {return $pending}
         if ($moved) {
+            $pending.Trace='header recheck'
             $restored=$false
             for ($n=0;$n -lt 14;$n++) {
                 $stamp=Invoke-FoxmailWheel $ctx 720 $stamp
@@ -359,12 +363,14 @@ function Get-FoxmailOpenContent {
             if (!$header -or $header.Identity -ne $receipt.Identity) {return $pending}
         }
         $needsRestore=$false
+        $pending.Trace='complete body'
         $body=(($lines | Select-Object -Skip $receipt.Start) -join "`n").Trim()
         if (!$body -or $body.Length -gt 19000 -or $stamp -ne (Get-FoxmailInputStamp)) {return $pending}
         return [pscustomobject]@{Complete=$true;Subject=$receipt.Subject;Body=$body;Sender=$receipt.Sender;Time=$receipt.Time
             Identity=(Get-FoxmailDigest ($receipt.Identity+'|'+(ConvertTo-FoxmailKeyText $body)))}
     } catch {
         # No OCR text, addresses, headers, or notification contents in diagnostics.
+        $pending.Trace+='@'+$_.InvocationInfo.ScriptLineNumber+'/'+$_.Exception.GetType().Name
         $pending.Reason='未能连续核对前台邮箱、邮件身份与正文末尾。请保持目标窗口可见，展开邮件头。'
         return $pending
     } finally {
