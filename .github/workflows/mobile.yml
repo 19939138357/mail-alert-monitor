@@ -1,0 +1,63 @@
+name: Android handset
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'handset/android/**'
+      - 'release/android.json'
+      - '.github/workflows/mobile.yml'
+      - 'scripts/test_android_ui.sh'
+permissions:
+  contents: read
+jobs:
+  mobile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Get the verified maintainer-signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref=$(jq -er .commit release/android.json)
+          [[ "$ref" =~ ^[0-9a-f]{40}$ ]]
+          mkdir dist
+          apk=dist/MailAlertMonitor-Android.apk
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$ref/MailAlertMonitor-Android.apk" -o "$apk"
+          echo "$(jq -er .sha256 release/android.json)  $apk" | sha256sum -c
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/signer"
+          grep -Fx "Signer #1 certificate SHA-256 digest: $(jq -er .certificateSha256 release/android.json)" "$RUNNER_TEMP/signer"
+      - name: Verify downloadable code matches a clean build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp dist/MailAlertMonitor-Android.apk "$RUNNER_TEMP/signed.apk"
+          JAVA_HOME="$JAVA_HOME_17_X64" python3 handset/android/build.py
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import os
+          with ZipFile(Path(os.environ['RUNNER_TEMP'])/'signed.apk') as signed, ZipFile('dist/MailAlertMonitor-Android.apk') as built:
+              def payload(archive):
+                  return {n: archive.read(n) for n in archive.namelist() if not n.startswith('META-INF/')}
+              if payload(signed) != payload(built):
+                  raise SystemExit('APK payload differs from the source build')
+          PY
+          mv "$RUNNER_TEMP/signed.apk" dist/MailAlertMonitor-Android.apk
+      - name: Install and open the handset on Android
+        run: bash scripts/test_android_ui.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-handset
+          path: dist/MailAlertMonitor-Android.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-ui
+          path: .build/android-ui/*.png
+          include-hidden-files: true
+          if-no-files-found: error

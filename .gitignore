@@ -41,3 +41,9 @@ dist/
 **/*.zip
 **/*.class
 .DS_Store
+
+# Local release credentials
+.signing/
+*.p12
+*.pfx
+**/password
