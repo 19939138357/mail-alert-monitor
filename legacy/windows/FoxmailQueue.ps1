@@ -117,6 +117,10 @@ function Invoke-FoxmailQueueTick($Queue,$Config,$Engine,[string]$Path,[long]$Tic
     if ($screenFailed) { return '窗口未就绪，已保留队列。' }
     $candidate = $Queue.Items | Where-Object { $_.Status -in @('reading','queued','review') -and $_.After -le $Tick } | Select-Object -First 1
     if ($null -eq $candidate) { return $attentionHint }
+    $bodyEngine=$Config.PSObject.Properties['foxmailBodyOcr']
+    if ($bodyEngine -and $bodyEngine.Value -eq 'mimo-local' -and -not (Test-MimoReady)) {
+        return '小米本地模型尚未就绪。已保留未读队列，请在监控设置启动模型。'
+    }
     $resume = $candidate.Status -ne 'queued'
     $candidate.Status = 'reading'
     Save-FoxmailQueue $Queue $Path

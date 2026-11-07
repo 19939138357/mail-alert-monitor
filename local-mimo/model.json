@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "model": "MiMo-VL-7B-RL-2508 Q4_K_M",
+  "source": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+  "quantizedBy": "mradermacher",
+  "revision": "c8ea4c272c576544ef61acddb8c774625df1166c",
+  "alias": "mimo-vl-local",
+  "port": 48765,
+  "files": [
+    {
+      "name": "MiMo-VL-7B-RL-2508.Q4_K_M.gguf",
+      "size": 4684340832,
+      "sha256": "1aeb06106c7f9fbe94127c03c88c8a53b9fb3cff94b1d73b334ef4efc2544b4c",
+      "url": "https://huggingface.co/mradermacher/MiMo-VL-7B-RL-2508-GGUF/resolve/c8ea4c272c576544ef61acddb8c774625df1166c/MiMo-VL-7B-RL-2508.Q4_K_M.gguf"
+    },
+    {
+      "name": "MiMo-VL-7B-RL-2508.mmproj-Q8_0.gguf",
+      "size": 729287840,
+      "sha256": "b99ad775f6f0687f23fbdec573a005a6bea194a1e28db2ae5311ee1075f0253f",
+      "url": "https://huggingface.co/mradermacher/MiMo-VL-7B-RL-2508-GGUF/resolve/c8ea4c272c576544ef61acddb8c774625df1166c/MiMo-VL-7B-RL-2508.mmproj-Q8_0.gguf"
+    }
+  ],
+  "runtime": {
+    "mac-arm64": {
+      "name": "llama-b12180-bin-macos-arm64.tar.gz",
+      "size": 16698833,
+      "sha256": "0883467d96aa2ec28b3992e06796de66623b037f4b5722da52c39ca53941ed5c",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12180/llama-b12180-bin-macos-arm64.tar.gz"
+    },
+    "mac-x64": {
+      "name": "llama-b12180-bin-macos-x64.tar.gz",
+      "size": 12437328,
+      "sha256": "c87e617d394892f3eb40acda8f3884628a1958f6dc84b959e4ad1bc6adf19fb4",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12180/llama-b12180-bin-macos-x64.tar.gz"
+    },
+    "windows-x64": {
+      "name": "llama-b12180-bin-win-cpu-x64.zip",
+      "size": 24749382,
+      "sha256": "b272cddf0e9c0692df0587b6f4cb8de4296e2d136b1b5b095ac0fe9807deeb20",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12180/llama-b12180-bin-win-cpu-x64.zip"
+    }
+  }
+}

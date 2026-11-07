@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'legacy/windows/**'
+      - 'local-mimo/**'
       - '.github/workflows/windows.yml'
   pull_request:
     paths:
       - 'legacy/windows/**'
+      - 'local-mimo/**'
       - '.github/workflows/windows.yml'
   workflow_dispatch:
 permissions:
@@ -27,6 +29,9 @@ jobs:
           & .\legacy\windows\tests\Test-MailConfirmation.ps1
           & .\legacy\windows\tests\Test-FoxmailQueue.ps1
           & .\legacy\windows\tests\Test-FoxmailScreen.ps1
+          & .\legacy\windows\tests\Test-MimoOCR.ps1
+      - name: Verify the Windows local-model transport
+        run: python local-mimo/test_windows_transport.py
       - name: Build the portable application
         run: python legacy/windows/package.py
       - name: Open the packaged app on a clean profile

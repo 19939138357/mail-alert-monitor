@@ -13,7 +13,7 @@ ROOT = WINDOWS.parents[1]
 DESKTOP = WINDOWS / '03_交付物/告警抽查桌面版'
 WORK = ROOT / '.build/windows-package'
 SCRIPTS = (
-    'Monitor-WindowKeywords.ps1', 'FoxmailQueue.ps1', 'FoxmailScreen.ps1', 'FoxmailScreenNative.cs',
+    'Monitor-WindowKeywords.ps1', 'MimoOCR.ps1', 'Start-MiMo.ps1', 'FoxmailQueue.ps1', 'FoxmailScreen.ps1', 'FoxmailScreenNative.cs',
     'MailConfirmation.ps1', 'VerificationCode.ps1',
     'VerificationMonitor.ps1', 'VerificationPush.ps1', 'NotificationTransport.ps1',
     'Configure-PhoneNotification.ps1', 'Test-VerificationPhone.ps1',
@@ -85,6 +85,7 @@ def main():
     inputs.update({'MailAlertMonitor.exe': exe, 'AntdUI.dll': dll,
                    'LICENSE.txt': ROOT / 'LICENSE', 'AntdUI-LICENSE.txt': DESKTOP / 'AntdUI-LICENSE.txt',
                    '使用说明.txt': WINDOWS / 'PORTABLE.md'})
+    inputs['MiMo/model.json'] = ROOT / 'local-mimo/model.json'
     destination = ROOT / 'dist/MailAlertMonitor-Windows.zip'
     destination.parent.mkdir(exist_ok=True)
     stage = WORK / 'windows-release.tmp'

@@ -33,6 +33,7 @@ struct FrameOCRCache {
     var capturedAt=Date.distantPast
     var lines:[OCRLine]=[]
     var dots:[UnreadList.Dot]=[]
+    var mimoText:String?
     static func fingerprint(_ image:CGImage)->String? {
         guard image.width>0,image.height>0,image.width*image.height<=32_000_000 else{return nil}
         var bytes=[UInt8](repeating:0,count:image.width*image.height*4)
@@ -48,10 +49,17 @@ struct FrameOCRCache {
     func reusable(_ key:String?,now:Date)->Bool {
         key != nil && key==fingerprint && now.timeIntervalSince(capturedAt)>=0 && now.timeIntervalSince(capturedAt)<30
     }
-    func updating(_ image:CGImage,now:Date,includeDots:Bool)throws->Self {
+    func updating(_ image:CGImage,now:Date,includeDots:Bool,useMimo:Bool=false)throws->Self {
         let key=Self.fingerprint(image)
-        if reusable(key,now:now){return self}
-        return Self(fingerprint:key,capturedAt:now,lines:try recognize(image),dots:includeDots ? UnreadList.dots(image):[])
+        if reusable(key,now:now), (mimoText != nil) == useMimo {return self}
+        let lines=try recognize(image)
+        var text:String?
+        if useMimo {
+            let inset=CGRect(x:0,y:4,width:image.width,height:max(1,image.height-16))
+            guard let reader=image.cropping(to:inset) else{throw failure("正文区域不可用")}
+            text=try MimoOCR.recognize(reader)
+        }
+        return Self(fingerprint:key,capturedAt:useMimo ? Date():now,lines:lines,dots:includeDots ? UnreadList.dots(image):[],mimoText:text)
     }
 }
 enum MailboxLayout {

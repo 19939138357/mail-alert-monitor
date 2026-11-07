@@ -6,13 +6,19 @@
 
 | 平台 | 下载 | 首次打开 |
 | --- | --- | --- |
-| macOS 14 及以上，Intel 或 Apple 芯片 | [Mac 通用版 ZIP](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.0/MailAlertMonitor-macOS.zip) | 解压，把两个 App 放在同一文件夹，打开「抽查邮件监控开源版」 |
-| Windows 10 / 11，.NET Framework 4.8 | [Windows 便携版 ZIP](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.0/MailAlertMonitor-Windows.zip) | 将整个 ZIP 解压到自己的可写文件夹，双击 `MailAlertMonitor.exe` |
-| 安卓 8 及以上 | [「监控机 1」APK](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.0/MailAlertMonitor-Android.apk) | 在手机上安装，打开「配对电脑」，输入 Mac 上显示的六位码 |
+| macOS 14 及以上，Intel 或 Apple 芯片 | [Mac 通用版 ZIP](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.1/MailAlertMonitor-macOS.zip) | 解压，把两个 App 放在同一文件夹，打开「抽查邮件监控开源版」 |
+| Windows 10 / 11，.NET Framework 4.8 | [Windows 便携版 ZIP](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.1/MailAlertMonitor-Windows.zip) | 将整个 ZIP 解压到自己的可写文件夹，双击 `MailAlertMonitor.exe` |
+| 安卓 8 及以上 | [「监控机 1」APK](https://github.com/19939138357/mail-alert-monitor/releases/download/v1.4.1/MailAlertMonitor-Android.apk) | 在手机上安装，打开「配对电脑」，输入 Mac 上显示的六位码 |
 
-[版本说明及 SHA-256 校验文件](https://github.com/19939138357/mail-alert-monitor/releases/tag/v1.4.0) · [MIT 许可证](LICENSE)
+[版本说明及 SHA-256 校验文件](https://github.com/19939138357/mail-alert-monitor/releases/tag/v1.4.1) · [MIT 许可证](LICENSE)
 
 ![Mac 监控总览，展示正在监控、待处理邮件数量和最近的邮件原主题。图中为合成示例。](macos/Assets/monitor-overview.png)
+
+## 小米 MiMo 本地识别
+
+Mac 和 Windows 新增“小米 MiMo 本地”正文引擎。首次从设置中点“安装或启动小米模型”，下载并校验约 5.4 GB 模型文件。等待模型窗口显示就绪后再启动邮件监控。Mac 的安装工具需要 Python 3.8+，Windows 安装工具随便携包提供。
+
+使用 Xiaomi MiMo-VL-7B-RL-2508 的社区量化权重，文字识别在自己的电脑上完成。原有系统识别和像素检查负责定位未读标记、点击和滚动末尾。16 GB 内存的 Apple 芯片 Mac 已用合成图片运行本地推理，自己的真实邮箱仍需核对。[模型安装、来源与运行说明](local-mimo/README.md)
 
 ## Mac 上监控未读邮件
 

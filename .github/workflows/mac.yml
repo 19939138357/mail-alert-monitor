@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'macos/**'
+      - 'local-mimo/**'
       - 'handset/mac/**'
       - '.github/workflows/mac.yml'
 permissions:
@@ -22,7 +23,9 @@ jobs:
           node macos/portal-login.test.cjs
           node macos/portal-device.test.cjs
       - name: Build both architectures and run monitor checks
-        run: bash macos/build.sh
+        run: |
+          bash macos/build.sh
+          python3 local-mimo/test_protocol.py
       - name: Build pairing tool and exercise private HTTPS transport
         run: |
           bash handset/mac/build-pair.sh

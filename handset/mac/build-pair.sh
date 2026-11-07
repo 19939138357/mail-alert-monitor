@@ -31,7 +31,7 @@ cat >"$app/Contents/Info.plist" <<'PLIST'
 PLIST
 for arch in arm64 x86_64; do
   flags=(-swift-version 5 -parse-as-library -O -target "${arch}-apple-macos14.0" -module-cache-path "$cache/swift-cache")
-  xcrun swiftc "${flags[@]}" -file-prefix-map "$repo=." "$repo/macos/MailboxApproval.swift" "$repo/macos/Core.swift" "$repo/macos/Inbox.swift" "$here/Host.swift" "$here/MailboxFrame.swift" -o "$stage/host.$arch"
+  xcrun swiftc "${flags[@]}" -file-prefix-map "$repo=." "$repo/macos/MailboxApproval.swift" "$repo/macos/Core.swift" "$repo/macos/MimoOCR.swift" "$repo/macos/Inbox.swift" "$here/Host.swift" "$here/MailboxFrame.swift" -o "$stage/host.$arch"
   xcrun swiftc "${flags[@]}" -file-prefix-map "$repo=." "$repo/macos/MailboxApproval.swift" "$here/PairingEvents.swift" "$here/PairingDiscovery.swift" "$here/PairingApp.swift" -o "$stage/pair.$arch"
 done
 xcrun lipo -create "$stage/host.arm64" "$stage/host.x86_64" -output "$app/Contents/Resources/MailControlHost"

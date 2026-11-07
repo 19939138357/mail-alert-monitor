@@ -11,3 +11,5 @@
 - macOS 图标为本项目生成资源；Windows 图标为本项目绘制资源。邮件列表测试图片由 `macos/GenerateSample.swift` 本地合成，不含真实邮件。
 
 安卓控制端以及配对工具使用系统网络接口，局域网发现采用 DNS-SD，通信通过 HTTPS。六位码配对协议与独立 Android 响铃助手的依赖说明见各自源码目录。
+
+MiMo 本地识别使用 XiaomiMiMo/MiMo-VL-7B-RL-2508 的社区量化权重和 llama.cpp，本地安装工具按 local-mimo/model.json 固定修订与摘要获取。MiMo 模型及 llama.cpp 使用各自的 MIT 条款，小米 MiMo-VL 源码仓库另有其许可证。权重和运行程序在用户首次安装时下载，来源、量化者及原始链接见 local-mimo/README.md。

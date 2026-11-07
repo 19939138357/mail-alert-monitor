@@ -80,5 +80,6 @@
   "verificationCodePushExistingOnStart": false,
   "notificationSettingsFile": "04_资料/私密配置/notification_settings.json",
   "notificationSecretsFile": "04_资料/私密配置/notification_secrets.xml",
-  "mailConfirmationListCheckIntervalSeconds": 30
+  "mailConfirmationListCheckIntervalSeconds": 30,
+  "foxmailBodyOcr": "mimo-local"
 }

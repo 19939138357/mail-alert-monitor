@@ -8,7 +8,7 @@ mkdir -p "$task_app/Contents/MacOS" "$task_app/Contents/Resources" "$task_cache"
 xcrun swiftc -module-cache-path "$task_cache" "$task_source/GenerateSample.swift" -o "$task_cache/generate-sample"
 "$task_cache/generate-sample" "$task_cache/MailSample.png"
 cp "$task_cache/MailSample.png" "$task_app/Contents/Resources/MailSample.png"
-sources=(Core NotificationHealth Inbox InboxScanner InboxTests SystemLogin RecoveryPolicy Recovery SafariDevice MailboxApproval PublicMailbox Interface App)
+sources=(Core MimoOCR NotificationHealth Inbox InboxScanner InboxTests SystemLogin RecoveryPolicy Recovery SafariDevice MailboxApproval PublicMailbox Interface App)
 swift_files=()
 for source in "${sources[@]}"; do swift_files+=("$task_source/$source.swift"); done
 for arch in arm64 x86_64; do
@@ -19,6 +19,9 @@ for arch in arm64 x86_64; do
 done
 xcrun lipo -create "$task_cache/MailMonitor-arm64" "$task_cache/MailMonitor-x86_64" \
   -output "$task_app/Contents/MacOS/MailMonitor"
+cp "$task_project/local-mimo/Start-MiMo.command" "$task_app/Contents/Resources/"
+cp "$task_project/local-mimo/install.py" "$task_project/local-mimo/model.json" "$task_app/Contents/Resources/"
+chmod +x "$task_app/Contents/Resources/Start-MiMo.command"
 cp "$task_source/Info.plist" "$task_app/Contents/Info.plist"
 cp "$task_source/portal-login.js" "$task_app/Contents/Resources/portal-login.js"
 cp "$task_source/portal-device.js" "$task_app/Contents/Resources/portal-device.js"

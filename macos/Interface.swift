@@ -359,6 +359,23 @@ struct MainView: View {
                     Text("先保存队列，再点击未读邮件、逐页读取正文，最后发送实际内容。读取不完整时保留等待，不发送空提示。请将 Foxmail 按“是否已读”排序、收起“已读”组，并保持远程邮箱连接。发送结果不明确时不会自动重发。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                 }
             }
+            MonitorCard {
+                VStack(alignment:.leading,spacing:12) {
+                    Label("正文识别",systemImage:"text.viewfinder").font(.headline)
+                    Picker("识别引擎",selection:$m.settings.bodyOcr) {
+                        Text("小米 MiMo 本地 · 免费").tag("mimo-local")
+                        Text("系统本机识别").tag("system")
+                    }.disabled(editingLocked).onChange(of:m.settings.bodyOcr){_,_ in persistOptions()}
+                    Text("小米模型负责读取正文，系统负责定位未读邮件。首次需下载约 5.4 GB，运行时占用电脑内存。建议 16 GB 或更多内存。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                    HStack {
+                        Button("安装或启动小米模型"){m.openMimoInstaller()}.disabled(editingLocked)
+                        Button("测试小米识别"){Task{await m.testMimo()}}.disabled(editingLocked)
+                    }
+                    if !m.mimoResult.isEmpty {
+                        ScrollView{Text(m.mimoResult).font(.callout).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)}.frame(maxHeight:180)
+                    }
+                }
+            }
             if SystemPortal.isAdapted { MonitorCard {
                 HStack(alignment:.top,spacing:16){settingIcon("person.crop.circle.badge.checkmark");VStack(alignment:.leading,spacing:8){Text("系统账号").font(.headline);Text(m.hasSystemCredentials ? "已安全保存在本机，可用于一键连接。":"首次连接前，请填写系统用户名与口令。").font(.callout).foregroundStyle(.secondary);Text("仅用于 portal.example.com:9978").font(.caption).foregroundStyle(.secondary)};Spacer();Button(m.hasSystemCredentials ? "管理账号":"设置账号"){m.systemError="";m.showSystemSettings=true}.disabled(editingLocked)}
                 if m.portalNeedsUnlock {

@@ -177,7 +177,7 @@ function Get-FoxmailContext($Config) {
     }
     $list=$regions[0];$body=$regions[1]
     if ($list.Left+$list.Width -gt $body.Left+2) {return}
-    [pscustomobject]@{Window=$window;Process=$snap.ProcessName;List=$list;Body=$body;Target=(Get-FoxmailDigest ($snap.ProcessName+'|'+$snap.Title))}
+    [pscustomobject]@{Window=$window;UseMimo=((Get-ConfigString $Config 'foxmailBodyOcr' 'system') -eq 'mimo-local');Process=$snap.ProcessName;List=$list;Body=$body;Target=(Get-FoxmailDigest ($snap.ProcessName+'|'+$snap.Title))}
 }
 
 function Test-FoxmailVisible($Context,$Roi) {
@@ -245,8 +245,16 @@ function Read-FoxmailFrame($Context,$Engine,[ValidateSet('List','Body','Window')
         } elseif ($Pane -eq 'Body' -and $lines.Count) {
             $atEnd=[FoxmailScreenNative]::ScrollbarAtEnd($bmp) -or (Test-FoxmailNativeEnd $Context)
         }
+        $text=[string[]]@($lines | ForEach-Object Text)
+        $mimoProperty=$Context.PSObject.Properties['UseMimo']
+        if ($Pane -eq 'Body' -and $mimoProperty -and $mimoProperty.Value) {
+            $text=[string[]]@(Read-MimoText $bmp)
+            if (!(Test-FoxmailVisible $Context $roi) -or ![FoxmailScreenNative]::RegionUnchanged($bmp,$roi.Left,$roi.Top)) {
+                throw '小米识别期间正文画面发生变化。'
+            }
+        }
         if (!(Test-FoxmailVisible $Context $roi)) {throw '识别期间目标窗口已变化。'}
-        return [pscustomobject]@{Rows=$rows;Lines=$lines;DotCount=$dots.Count;AtEnd=$atEnd;Text=[string[]]@($lines | ForEach-Object Text)}
+        return [pscustomobject]@{Rows=$rows;Lines=$lines;DotCount=$dots.Count;AtEnd=$atEnd;Text=$text}
     } finally {$bmp.Dispose()}
 }
 

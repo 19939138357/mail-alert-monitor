@@ -75,6 +75,12 @@ try {
     $q.Items[3].Status='sending'; Save-FoxmailQueue $q $path
     $q=Read-FoxmailQueue $path; Tick $q 1000
     Assert ($q.Items[3].Status -eq 'uncertain' -and $script:sends -eq 5) 'Crash after write-ahead intent cannot double send'
+    $script:visible=@((Ticket 'model-not-ready'))
+    $beforeReads=$script:reads
+    function Test-MimoReady {return $false}
+    $localConfig=[pscustomobject]@{foxmailBodyOcr='mimo-local'}
+    [void](Invoke-FoxmailQueueTick $q $localConfig $null $path 1001)
+    Assert ($q.Items[-1].Status -eq 'queued' -and $script:reads -eq $beforeReads) 'Offline model cannot consume an unread flag'
     [IO.File]::WriteAllText($path,'broken')
     $rejected=$false
     try { $null=Read-FoxmailQueue $path } catch { $rejected=$true }

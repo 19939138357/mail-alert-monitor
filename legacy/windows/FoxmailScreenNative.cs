@@ -6,6 +6,26 @@ using System.Runtime.InteropServices;
 using System.Threading;
 
 public static class FoxmailScreenNative {
+    public static bool RegionUnchanged(Bitmap expected, int left, int top) {
+        using (var current = new Bitmap(expected.Width, expected.Height, PixelFormat.Format32bppArgb)) {
+            using (var graphics = Graphics.FromImage(current)) {
+                graphics.CopyFromScreen(left, top, 0, 0, current.Size);
+            }
+            var region = new Rectangle(0, 0, expected.Width, expected.Height);
+            var first = expected.LockBits(region, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            var second = current.LockBits(region, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try {
+                var a = new byte[expected.Width * 4]; var b = new byte[a.Length];
+                for (int y = 0; y < expected.Height; y++) {
+                    Marshal.Copy(IntPtr.Add(first.Scan0, y * first.Stride), a, 0, a.Length);
+                    Marshal.Copy(IntPtr.Add(second.Scan0, y * second.Stride), b, 0, b.Length);
+                    for (int x = 0; x < a.Length; x++) if (a[x] != b[x]) return false;
+                }
+                return true;
+            } finally { expected.UnlockBits(first); current.UnlockBits(second); }
+        }
+    }
+
     // Only scan the leading column of the calibrated list. Work in local pixels
     // so a blue toolbar or a wide selected row cannot be mistaken for a dot.
     public static Point[] Dots(Bitmap bitmap) {

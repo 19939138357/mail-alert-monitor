@@ -14,9 +14,10 @@ struct Settings: Codable {
     var bundle=""
     var includeExistingUnread=true
     var approvedPage:String?
+    var bodyOcr="mimo-local"
     var browseEntireList=false
     init(){}
-    enum CodingKeys:String,CodingKey {case list,body,night,autoOpen,title,bundle,includeExistingUnread,browseEntireList,approvedPage}
+    enum CodingKeys:String,CodingKey {case list,body,night,autoOpen,title,bundle,includeExistingUnread,browseEntireList,approvedPage,bodyOcr}
     init(from decoder:Decoder)throws {
         let c=try decoder.container(keyedBy:CodingKeys.self)
         list=try c.decodeIfPresent(Region.self,forKey:.list) ?? list;body=try c.decodeIfPresent(Region.self,forKey:.body) ?? body
@@ -24,6 +25,7 @@ struct Settings: Codable {
         title=try c.decodeIfPresent(String.self,forKey:.title) ?? "";bundle=try c.decodeIfPresent(String.self,forKey:.bundle) ?? ""
         includeExistingUnread=try c.decodeIfPresent(Bool.self,forKey:.includeExistingUnread) ?? true
         approvedPage=try c.decodeIfPresent(String.self,forKey:.approvedPage)
+        bodyOcr=try c.decodeIfPresent(String.self,forKey:.bodyOcr) ?? "system"
         browseEntireList=false // Retired: never tour read-mail history.
     }
 }
@@ -69,6 +71,7 @@ enum SystemPortal {
     @Published var lastScan="尚未扫描"
     @Published var screenAllowed=CGPreflightScreenCaptureAccess()
     @Published var accessibility=AXIsProcessTrusted()
+    @Published var mimoResult=""
     @Published var ocrSummary="邮件正文会保存在本机队列中。"
     var task: Task<Void,Never>?
     var connectionTask: Task<Void,Never>?
@@ -341,6 +344,24 @@ enum SystemPortal {
     func save() throws {
         guard settings.list.valid,settings.body.valid else{throw failure("识别区域过小或超出画面")}
         try Storage.write(settings,to:Storage.root.appendingPathComponent("settings.json"))
+    }
+    func testMimo() async {
+        guard !running,!busy else{return}
+        busy=true;defer{busy=false}
+        mimoResult="正在用合成邮件测试小米模型…"
+        do {
+            guard let url=Bundle.main.url(forResource:"MailSample",withExtension:"png"),
+                  let image=NSImage(contentsOf:url),let cg=image.cgImage(forProposedRect:nil,context:nil,hints:nil) else {throw failure("示例图片不可用")}
+            let started=Date()
+            let text=try await Task.detached{try MimoOCR.recognize(cg)}.value
+            mimoResult="本地识别完成（\(Int(Date().timeIntervalSince(started))) 秒）\n"+text
+        }catch{mimoResult=error.localizedDescription}
+    }
+    func openMimoInstaller() {
+        guard let script=Bundle.main.url(forResource:"Start-MiMo",withExtension:"command") else {
+            note("请重新解压完整安装包，以取得小米模型安装工具。");return
+        }
+        NSWorkspace.shared.open(script)
     }
     func saveToken() async {
         guard !running,!testInFlight,!tokenSaving,!openingSystem,!unlockingNotifications else{return}
@@ -667,6 +688,12 @@ struct CapturePreview: View {
     @StateObject var model:Monitor
     init() {
         if CommandLine.arguments.contains("--self-test") {do{try SelfTests.run();exit(0)}catch{print("FAIL: \(error.localizedDescription)");exit(1)}}
+        if let index=CommandLine.arguments.firstIndex(of:"--mimo-read"),index+1<CommandLine.arguments.count {
+            do {
+                guard let image=NSImage(contentsOfFile:CommandLine.arguments[index+1]),let cg=image.cgImage(forProposedRect:nil,context:nil,hints:nil) else{throw failure("合成图片不可用")}
+                print(try MimoOCR.recognize(cg));exit(0)
+            }catch{print("FAIL: \(error.localizedDescription)");exit(1)}
+        }
         if let index=CommandLine.arguments.firstIndex(of:"--replay"),index+1<CommandLine.arguments.count {
             do{try SelfTests.replay(URL(fileURLWithPath:CommandLine.arguments[index+1]));exit(0)}catch{print("FAIL: \(error.localizedDescription)");exit(1)}
         }

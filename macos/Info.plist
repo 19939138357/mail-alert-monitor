@@ -6,8 +6,8 @@
 <key>CFBundleDisplayName</key><string>抽查邮件监控</string>
 <key>CFBundleExecutable</key><string>MailMonitor</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.4.0</string>
-<key>CFBundleVersion</key><string>25</string>
+<key>CFBundleShortVersionString</key><string>1.4.1</string>
+<key>CFBundleVersion</key><string>26</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>NSAppleEventsUsageDescription</key><string>仅在你点击进入监控机1时控制Safari登录指定系统，并从监控机1工具栏的浏览器按钮连接邮箱。</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>

@@ -1338,6 +1338,7 @@ function Invoke-PhoneCall {
 . (Join-Path $PSScriptRoot 'NotificationTransport.ps1')
 . (Join-Path $PSScriptRoot 'VerificationPush.ps1')
 . (Join-Path $PSScriptRoot 'VerificationMonitor.ps1')
+. (Join-Path $PSScriptRoot 'MimoOCR.ps1')
 . (Join-Path $PSScriptRoot 'MailConfirmation.ps1')
 . (Join-Path $PSScriptRoot 'FoxmailQueue.ps1')
 . (Join-Path $PSScriptRoot 'FoxmailScreen.ps1')

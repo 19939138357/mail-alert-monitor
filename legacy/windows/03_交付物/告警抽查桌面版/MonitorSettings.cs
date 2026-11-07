@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -34,13 +35,13 @@ internal static class MonitorSettings
             form.Text = "监控设置";
             form.AutoScaleMode = AutoScaleMode.Dpi;
             form.Font = new Font(DesktopTheme.UiFont, 10);
-            form.ClientSize = new Size(570, 458);
+            form.ClientSize = new Size(570, 518);
             form.FormBorderStyle = FormBorderStyle.FixedDialog;
             form.MaximizeBox = false;
             form.MinimizeBox = false;
             form.StartPosition = FormStartPosition.CenterParent;
             form.BackColor = DesktopTheme.Surface;
-            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 7, ColumnCount = 2, Padding = new Padding(22) };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 8, ColumnCount = 2, Padding = new Padding(22) };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             form.Controls.Add(grid);
@@ -84,6 +85,23 @@ internal static class MonitorSettings
             mode.SelectedIndexChanged += delegate { updateMode(); };
             updateMode();
             grid.Controls.Add(interval, 1, 5);
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            grid.Controls.Add(new Label { Text = "正文识别", Anchor = AnchorStyles.Left, AutoSize = true }, 0, 6);
+            var engines = new FlowLayoutPanel { Dock = DockStyle.Fill };
+            var engine = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190, AccessibleName = "正文识别引擎" };
+            engine.Items.AddRange(new object[] { "系统本机识别", "小米 MiMo 本地 · 免费" });
+            engine.SelectedIndex = data.ContainsKey("foxmailBodyOcr") && Convert.ToString(data["foxmailBodyOcr"]) == "mimo-local" ? 1 : 0;
+            var launch = new Button { Text = "安装或启动模型", AutoSize = true };
+            launch.Click += delegate {
+                try {
+                    string script = Path.Combine(Path.GetDirectoryName(path), "Start-MiMo.ps1");
+                    Process.Start(new ProcessStartInfo("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\"") { UseShellExecute = true });
+                } catch (Exception) { MessageBox.Show(form, "请完整解压新版程序，并重新打开模型工具。", "模型启动"); }
+            };
+            Action updateEngine = delegate { engine.Enabled = mode.SelectedIndex == 2; };
+            mode.SelectedIndexChanged += delegate { updateEngine(); };
+            updateEngine();
+            engines.Controls.Add(engine); engines.Controls.Add(launch); grid.Controls.Add(engines, 1, 6);
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
             var calibrate = new Button { Text = "框选邮箱区域", AutoSize = true };
@@ -95,7 +113,7 @@ internal static class MonitorSettings
             buttons.Controls.Add(save);
             buttons.Controls.Add(cancel);
             buttons.Controls.Add(calibrate);
-            grid.Controls.Add(buttons, 0, 6);
+            grid.Controls.Add(buttons, 0, 7);
             grid.SetColumnSpan(buttons, 2);
             form.AcceptButton = save;
             form.CancelButton = cancel;
@@ -115,6 +133,7 @@ internal static class MonitorSettings
                     for (int i = 0; i < keys.Length; i++) data[keys[i]] = Values(editors[i].Text);
                     data["mailConfirmationAutoOpenEnabled"] = mode.SelectedIndex == 1;
                     data["foxmailUnreadEnabled"] = mode.SelectedIndex == 2;
+                    data["foxmailBodyOcr"] = engine.SelectedIndex == 1 ? "mimo-local" : "system";
                     string intervalKey = mode.SelectedIndex == 1 ? "mailConfirmationListCheckIntervalSeconds" : "intervalSeconds";
                     data[intervalKey] = (int)interval.Value;
                     File.WriteAllText(staged, serializer.Serialize(data), new UTF8Encoding(false));

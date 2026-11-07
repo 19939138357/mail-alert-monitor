@@ -60,17 +60,27 @@ import ApplicationServices
             guard let listImage=image.cropping(to:listRect),let bodyImage=image.cropping(to:bodyRect) else{throw failure("截图区域不可用")}
             let needsBody=readingMail != nil || inbox.tickets.contains{$0.state == .queued}
             let previousList=listOCRCache,previousBody=bodyOCRCache,cacheTime=Date()
+            let useMimo=settings.bodyOcr == "mimo-local"
             let cached=try await Task.detached { () -> (FrameOCRCache,FrameOCRCache) in
                 let list=try previousList.updating(listImage,now:cacheTime,includeDots:true)
-                let body=needsBody ? try previousBody.updating(bodyImage,now:cacheTime,includeDots:false):previousBody
+                let body=needsBody ? try previousBody.updating(bodyImage,now:cacheTime,includeDots:false,useMimo:useMimo):previousBody
                 return (list,body)
             }.value
             guard running,generation==epoch else{return}
             listOCRCache=cached.0;bodyOCRCache=cached.1
-            let result=(cached.0.lines,cached.0.dots,needsBody ? cached.1.lines.filter{$0.rect.minY>3 && $0.rect.maxY<Double(bodyImage.height)-12}.map(\.text).joined(separator:"\n"):"")
+            let result=(cached.0.lines,cached.0.dots,needsBody ? (cached.1.mimoText ?? cached.1.lines.filter{$0.rect.minY>3 && $0.rect.maxY<Double(bodyImage.height)-12}.map(\.text).joined(separator:"\n")):"")
             let current=try await currentWindow()
             guard running,generation==epoch else{return}
             guard current.frame==window.frame else{stableListFrames=0;readingMail?.stableFrames=0;tell("窗口位置发生变化，重新核对。");return}
+            if useMimo,needsBody {
+                let fresh=try await capture(current)
+                guard let freshBody=fresh.cropping(to:bodyRect),let freshList=fresh.cropping(to:listRect),
+                      FrameOCRCache.fingerprint(freshBody)==FrameOCRCache.fingerprint(bodyImage),
+                      FrameOCRCache.fingerprint(freshList)==FrameOCRCache.fingerprint(listImage) else {
+                    bodyOCRCache=FrameOCRCache();stableListFrames=0;readingMail?.stableFrames=0
+                    tell("小米识别期间邮箱画面变化，正在重新核对。");return
+                }
+            }
             let now=Date();lastFrameAt=now;frames+=1;linesCount=result.0.count;lastScan=DateFormatter.localizedString(from:now,dateStyle:.none,timeStyle:.medium)
             preview=NSImage(cgImage:image,size:window.frame.size)
             let localRows=UnreadList.rows(result.0,dots:result.1,now:now)
@@ -113,6 +123,11 @@ import ApplicationServices
                 now.timeIntervalSince(lastReadRetry[ticket.id] ?? .distantPast)>60 && ticket.retryRow(in:rows,now:now) != nil
             }
             let nextTicket=unreadTicket ?? retryTicket
+            if useMimo,settings.autoOpen,(readingMail != nil || nextTicket != nil) {
+                let ready=await Task.detached { MimoOCR.ready() }.value
+                guard running,generation==epoch else{return}
+                guard ready else{tell("小米本地模型尚未就绪，已保留未读队列；请在设置中启动模型。");return}
+            }
             if settings.autoOpen,!active(current),
                (readingMail != nil || nextTicket != nil),
                await activateMailWhenIdle(current) {

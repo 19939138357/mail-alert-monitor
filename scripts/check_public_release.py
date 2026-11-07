@@ -29,7 +29,7 @@ lan_fixtures = {
 }
 
 blocked_parts = {'.git', 'node_modules', '.venv', '__pycache__', 'signing', '.signing', 'runtime', '04_资料', '.build', 'dist', 'build', 'bin', 'obj'}
-blocked_suffixes = {'.log', '.apk', '.exe', '.dll', '.keystore', '.jks', '.pem', '.key', '.p12', '.pfx', '.zip', '.pyc', '.class'}
+blocked_suffixes = {'.log', '.apk', '.exe', '.dll', '.keystore', '.jks', '.pem', '.key', '.p12', '.pfx', '.token', '.zip', '.pyc', '.class'}
 blocked_names = {'password', 'pair.key', 'monitor_config.json', 'notification_settings.json', 'notification_secrets.xml', 'settings.json', 'last_ocr.txt', 'last_screenshot.png', '.DS_Store'}
 patterns = {
     'private-key': re.compile(r'-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----'),
