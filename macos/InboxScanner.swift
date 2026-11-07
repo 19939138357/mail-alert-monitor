@@ -7,6 +7,12 @@ import ApplicationServices
     func scanInbox(epoch:Int) async {
         guard !busy else{return};busy=true;defer{busy=false}
         do {
+            if settings.bodyOcr == "mimo-local",MimoOCR.startupEpoch != epoch {
+                MimoOCR.startupEpoch=epoch
+                let ready=await Task.detached{MimoOCR.ready() || MimoOCR.launcherRunning()}.value
+                guard running,generation==epoch else{return}
+                if !ready{openMimoInstaller();note("正在启动本地小米模型，未读邮件会先进入队列。")}
+            }
             // Completed mail does not depend on the remote desktop being online.
             if notificationAvailability.canOpenMail,let ready=inbox.tickets.first(where:{$0.state == .ready && $0.content != nil}) {
                 try await sendInbox(ready,epoch:epoch)

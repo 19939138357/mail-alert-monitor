@@ -157,6 +157,9 @@ function Start-FoxmailUnreadMonitor($Config,[switch]$Once,[switch]$NoSend) {
     $Config.scanFullDesktopWhenNoWindow = $false
     $Config.processNameContains = @()
     $queue = Read-FoxmailQueue $path
+    if ((Get-ConfigString $Config 'foxmailBodyOcr' 'system') -eq 'mimo-local') {
+        Start-MimoIfNeeded
+    }
     $engine = New-OcrEngine (Get-ConfigString $Config 'ocrLanguage' 'zh-Hans-CN')
     $last = ''; $loggedAt = 0L
     do {

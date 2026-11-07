@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Darwin
 
 /// MiMo runs on this computer. Only the calibrated reader image is submitted.
 enum MimoOCR {
@@ -54,6 +55,22 @@ enum MimoOCR {
         return try decode(send(request, timeout:180))
     }
 
+    @MainActor static var startupEpoch:Int?
+
+    static var home:URL {
+        ProcessInfo.processInfo.environment["MAIL_MIMO_HOME"].map { URL(fileURLWithPath:$0) }
+            ?? Storage.root.appendingPathComponent("mimo")
+    }
+
+    static func launcherRunning() -> Bool {
+        let descriptor=Darwin.open(home.appendingPathComponent("instance.lock").path,O_WRONLY)
+        guard descriptor>=0 else{return false}
+        defer{Darwin.close(descriptor)}
+        let occupied=flock(descriptor,LOCK_EX|LOCK_NB) != 0
+        if !occupied{flock(descriptor,LOCK_UN)}
+        return occupied
+    }
+
     static func ready() -> Bool {
         let url=URL(string:"http://127.0.0.1:48765/v1/models")!
         guard let data=try? send(URLRequest(url:url),timeout:3),
@@ -63,8 +80,6 @@ enum MimoOCR {
     }
 
     private static func send(_ input:URLRequest,timeout:Double) throws -> Data {
-        let home = ProcessInfo.processInfo.environment["MAIL_MIMO_HOME"].map { URL(fileURLWithPath:$0) }
-            ?? Storage.root.appendingPathComponent("mimo")
         let credential = try? String(contentsOf:home.appendingPathComponent("service.token"),encoding:.utf8).trimmingCharacters(in:.whitespacesAndNewlines)
         guard let credential, credential.count==64,credential.allSatisfy({$0.isHexDigit && !$0.isUppercase}) else {
             throw failure("请先安装或启动本机小米模型，待显示就绪后测试。")

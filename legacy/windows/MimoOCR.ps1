@@ -82,3 +82,20 @@ function Test-MimoReady {
         } finally {$response.Dispose()}
     } catch {return $false}
 }
+
+function Start-MimoIfNeeded {
+    if (Test-MimoReady) {return}
+    $mutex=[Threading.Mutex]::new($false,'Local\MailAlertMimoModel')
+    $acquired=$false
+    try {
+        try {$acquired=$mutex.WaitOne(0)} catch [Threading.AbandonedMutexException] {$acquired=$true}
+        if (-not $acquired) {return}
+    } finally {if ($acquired){$mutex.ReleaseMutex()};$mutex.Dispose()}
+    $tool=Join-Path $PSScriptRoot 'Start-MiMo.ps1'
+    if (-not (Test-Path -LiteralPath $tool)) {throw '找不到小米模型工具，请重新解压完整安装包。'}
+    $info=[Diagnostics.ProcessStartInfo]::new()
+    $info.FileName=Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    $info.Arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$tool+'"'
+    $info.UseShellExecute=$true
+    [void][Diagnostics.Process]::Start($info)
+}
