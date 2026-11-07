@@ -345,8 +345,8 @@ struct ReadingMail {
     var verifying=false
     var unreadBefore:Int?
     var selectionConfirmed=false
-    func shouldYield(to rows:[InboxRow],ticket:InboxTicket,now:Date)->Bool {
-        receipt == nil && rows.contains{$0.unread && $0.key != ticket.rowKey} && now.timeIntervalSince(started)>20
+    func shouldYield(to rows:[InboxRow],ticket:InboxTicket,now:Date,grace:TimeInterval=20)->Bool {
+        receipt == nil && rows.contains{$0.unread && $0.key != ticket.rowKey} && now.timeIntervalSince(started)>grace
     }
 }
 

@@ -61,28 +61,36 @@ import ApplicationServices
             let needsBody=readingMail != nil || inbox.tickets.contains{$0.state == .queued}
             let previousList=listOCRCache,previousBody=bodyOCRCache,cacheTime=Date()
             let useMimo=settings.bodyOcr == "mimo-local"
+            let readWithMimo=useMimo && readingMail != nil
             let cached=try await Task.detached { () -> (FrameOCRCache,FrameOCRCache) in
                 let list=try previousList.updating(listImage,now:cacheTime,includeDots:true)
-                let body=needsBody ? try previousBody.updating(bodyImage,now:cacheTime,includeDots:false,useMimo:useMimo):previousBody
+                let body=needsBody ? try previousBody.updating(bodyImage,now:cacheTime,includeDots:false,useMimo:readWithMimo):previousBody
                 return (list,body)
             }.value
             guard running,generation==epoch else{return}
-            listOCRCache=cached.0;bodyOCRCache=cached.1
-            let result=(cached.0.lines,cached.0.dots,needsBody ? (cached.1.mimoText ?? cached.1.lines.filter{$0.rect.minY>3 && $0.rect.maxY<Double(bodyImage.height)-12}.map(\.text).joined(separator:"\n")):"")
             let current=try await currentWindow()
             guard running,generation==epoch else{return}
             guard current.frame==window.frame else{stableListFrames=0;readingMail?.stableFrames=0;tell("窗口位置发生变化，重新核对。");return}
-            if useMimo,needsBody {
+            var currentList=cached.0
+            var previewImage=image
+            if readWithMimo {
                 let fresh=try await capture(current)
                 guard let freshBody=fresh.cropping(to:bodyRect),let freshList=fresh.cropping(to:listRect),
-                      FrameOCRCache.fingerprint(freshBody)==FrameOCRCache.fingerprint(bodyImage),
-                      FrameOCRCache.fingerprint(freshList)==FrameOCRCache.fingerprint(listImage) else {
+                      FrameOCRCache.fingerprint(freshBody)==FrameOCRCache.fingerprint(bodyImage) else {
                     bodyOCRCache=FrameOCRCache();stableListFrames=0;readingMail?.stableFrames=0
-                    tell("小米识别期间邮箱画面变化，正在重新核对。");return
+                    tell("小米识别期间正文画面变化，正在重新核对。");return
                 }
+                // New mail can arrive during inference. Refresh list positions without
+                // discarding the verified page of the message already being read.
+                let previous=currentList
+                currentList=try await Task.detached{try previous.updating(freshList,now:Date(),includeDots:true)}.value
+                guard running,generation==epoch else{return}
+                previewImage=fresh
             }
+            listOCRCache=currentList;bodyOCRCache=cached.1
+            let result=(currentList.lines,currentList.dots,needsBody ? (cached.1.mimoText ?? cached.1.lines.filter{$0.rect.minY>3 && $0.rect.maxY<Double(bodyImage.height)-12}.map(\.text).joined(separator:"\n")):"")
             let now=Date();lastFrameAt=now;frames+=1;linesCount=result.0.count;lastScan=DateFormatter.localizedString(from:now,dateStyle:.none,timeStyle:.medium)
-            preview=NSImage(cgImage:image,size:window.frame.size)
+            preview=NSImage(cgImage:previewImage,size:window.frame.size)
             let localRows=UnreadList.rows(result.0,dots:result.1,now:now)
             let sx=window.frame.width/Double(image.width),sy=window.frame.height/Double(image.height)
             let rows=localRows.map {r->InboxRow in var value=r;value.point=CGPoint(x:(r.point.x+listRect.minX)*sx,y:(r.point.y+listRect.minY)*sy);return value}
@@ -105,7 +113,7 @@ import ApplicationServices
             if let ready=inbox.tickets.first(where:{$0.state == .ready && $0.content != nil}) {
                 try await sendInbox(ready,epoch:epoch);return
             }
-            if let reading=readingMail,let ticket=inbox.tickets.first(where:{$0.id==reading.ticketID}),reading.shouldYield(to:rows,ticket:ticket,now:now) {
+            if let reading=readingMail,let ticket=inbox.tickets.first(where:{$0.id==reading.ticketID}),reading.shouldYield(to:rows,ticket:ticket,now:now,grace:useMimo ? 200:20) {
                 lastReadRetry[ticket.id]=now
                 inbox.set(ticket.id,.queued);try persistInbox();readingMail=nil
                 tell("上一封未完成的任务已保留，优先处理当前未读邮件。");return

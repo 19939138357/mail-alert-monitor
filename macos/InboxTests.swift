@@ -56,6 +56,8 @@ enum InboxTests {
         try check(skipped.tickets.count==1,"previously excluded unread baseline recovers into a real ticket")
         var ongoing=ReadingMail(ticketID:id,started:now.addingTimeInterval(-31))
         try check(ongoing.shouldYield(to:[batch[1]],ticket:ticketForYield(ledger,id:id),now:now),"stalled prior reading cannot block a new unread mail")
+        try check(!ongoing.shouldYield(to:[batch[1]],ticket:ticketForYield(ledger,id:id),now:now,grace:200),"local model can complete a valid page after thirty seconds")
+        try check(ongoing.shouldYield(to:[batch[1]],ticket:ticketForYield(ledger,id:id),now:now.addingTimeInterval(200),grace:200),"local model grace still yields a stalled unverified page")
         ongoing.started=now
         try check(!ongoing.shouldYield(to:[batch[1]],ticket:ticketForYield(ledger,id:id),now:now),"active reading finishes before another mail")
         var redacted=InboxLedger();redacted.observe([row("客服电话检查2026年10月09日1次（确认码： 0843）")],now:now)
